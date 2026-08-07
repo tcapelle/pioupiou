@@ -1,0 +1,4 @@
+"License","http://developers.pioupiou.fr/data-licensing"
+"Attribution","(c) contributors of the OpenWindMap wind network <https://www.openwindmap.org>"
+"time","latitude","longitude","wind_speed_min","wind_speed_avg","wind_speed_max","wind_heading","pressure"
+"utc","degrees","degrees","km/h","km/h","km/h","degrees","(deprecated)"
