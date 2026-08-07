@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.claude/wandb-driven-dev.local.md
+wandb/
+pioudata/.weather_cache/
+artifacts/
