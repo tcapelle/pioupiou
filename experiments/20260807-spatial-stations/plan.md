@@ -6,7 +6,8 @@ Question: Do compact, pre-noon observations from stations around Lac du
 Bourget improve afternoon Traverse prediction over the current lake sensor plus
 CHAMBERY-AIX model?
 
-Status: fixed-revision smoke gate passed; both full roles are next.
+Status: full pair and independent review complete; proposed verdict awaits user
+approval before it is recorded below.
 
 ## Data-quality prerequisite
 
@@ -188,6 +189,22 @@ Required W&B keys are `test/average_precision`, `test/balanced_accuracy`,
 `test/recall`, `test/precision`, `test/brier_score`,
 `test/precision_at_recall_0_60`, `train/log_loss`,
 `model/max_abs_coefficient`, and `data/train_rows`.
+
+Active full runs:
+
+| Role | Model role | W&B run | Source commit |
+|---|---|---|---|
+| control | `variant` | [73fsq5lp](https://wandb.ai/capecape/pioupiou-traverse/runs/73fsq5lp) | `570c832` |
+| spatial | `spatial` | [xousyxz6](https://wandb.ai/capecape/pioupiou-traverse/runs/xousyxz6) | `570c832` |
+
+Both runs are finished, have all required finite metrics, and differ in W&B
+config only by role, feature list, and input-contract schema. The pinned draft
+[W&B comparison report](https://wandb.ai/capecape/pioupiou-traverse/reports/Traverse-spatial-station-ablation-%E2%80%94-2026-08-08--VmlldzoxNzY4ODM5Mg==)
+includes both runs and a config comparer.
+
+Historical preparation and scoring for 2025-07-21 also completed successfully
+with the spatial artifact. The prepared row matched its model, data, label,
+source-schema, and five-station manifest contracts before scoring.
 
 ## Decision metrics
 

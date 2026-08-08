@@ -1,0 +1,20 @@
+Command:
+uv run python train_traverse_model.py --dataset artifacts/traverse_daily.csv --role variant --wandb-mode online --wandb-name exp-20260807-spatial-stations-baseline --wandb-tags exp/20260807-spatial-stations,baseline
+
+Exit code: 0
+Source commit: 570c8328e4f68c2d96e46b1986723ca650ec5743
+W&B run: https://wandb.ai/capecape/pioupiou-traverse/runs/73fsq5lp
+State: finished
+Required metrics missing: none
+All required metrics finite: yes
+Model SHA-256: 6c301910333c78877ceb2ab5be38443bf38329b28da3f1de3f987819541a0fd6
+
+Test AP: 0.4248163861611408
+Test balanced accuracy: 0.6955015744489429
+Test precision: 0.3691588785046729
+Test recall: 0.6752136752136753
+Test Brier score: 0.14270035727826122
+Test precision at recall >= 0.60: 0.42857142857142855
+Test false positives / false negatives: 135 / 38
+Selected threshold: 0.26294636239192204
+Selected L2: 0.1
