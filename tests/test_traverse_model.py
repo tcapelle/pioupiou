@@ -10,7 +10,11 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
-from build_traverse_dataset import LabelConfig
+from build_traverse_dataset import (
+    METEO_FRANCE_SOURCE_SCHEMA,
+    PIOU_SOURCE_SCHEMA,
+    LabelConfig,
+)
 from compare_traverse_models import load_validated_inputs, sha256_file
 from prepare_noon_features import bind_to_model_schema
 from predict_traverse import validate_prepared_contract
@@ -19,6 +23,7 @@ from traverse_model import (
     build_pipeline,
     classification_metrics,
     fit_pipeline,
+    feature_names_for_role,
     load_artifact,
     load_artifact_with_sha256,
     load_daily_dataset,
@@ -72,6 +77,7 @@ class TraverseModelTests(unittest.TestCase):
         self.assertEqual(metrics["tn"], 1)
         self.assertEqual(metrics["fn"], 1)
         self.assertAlmostEqual(metrics["balanced_accuracy"], 0.5)
+        self.assertGreaterEqual(metrics["precision_at_recall_0_60"], 0.5)
 
     def test_sklearn_pipeline_imputes_scales_and_marks_all_missingness(self):
         features = ["a", "b"]
@@ -105,6 +111,25 @@ class TraverseModelTests(unittest.TestCase):
         self.assertEqual(list(result.columns), ["a", "b"])
         self.assertTrue(np.isnan(result.iloc[0]["a"]))
         self.assertEqual(result.iloc[0]["b"], 2.0)
+
+    def test_spatial_role_adds_only_spatial_feature_blocks(self):
+        frame = pd.DataFrame(
+            {
+                "cal_doy_sin": [0.0],
+                "piou_last_wind_avg_kmh": [5.0],
+                "mf_temperature_c_latest": [12.0],
+                "mfs_belley_temperature_c_latest": [11.0],
+                "debug_value": [99.0],
+            }
+        )
+        variant = feature_names_for_role(frame, "variant")
+        spatial = feature_names_for_role(frame, "spatial")
+
+        self.assertEqual(
+            set(spatial).difference(variant),
+            {"mfs_belley_temperature_c_latest"},
+        )
+        self.assertNotIn("debug_value", spatial)
 
     def test_noon_preparer_emits_exact_model_schema(self):
         prepared = {"date": "2025-09-21", "year": 2025, "a": 1, "new_field": 2}
@@ -220,6 +245,48 @@ class TraverseModelTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "stale mf_"):
                 predict_frame(path, stale)
 
+    def test_spatial_inference_requires_primary_feeds_but_not_optional_stations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "model.joblib"
+            features = [
+                "piou_last_wind_avg_kmh",
+                "piou_observation_count_morning",
+                "piou_last_age_minutes",
+                "mf_temperature_c_latest",
+                "mf_core_observation_count_morning",
+                "mf_last_age_minutes",
+                "mfs_belley_temperature_c_latest",
+            ]
+            save_fitted_model(
+                path,
+                {
+                    "role": "spatial",
+                    "label": {
+                        "maximum_feature_age_minutes": 30,
+                        "maximum_weather_feature_age_minutes": 90,
+                    },
+                },
+                features,
+            )
+            primary_only = pd.DataFrame(
+                {
+                    "piou_last_wind_avg_kmh": [5.0],
+                    "piou_observation_count_morning": [10],
+                    "piou_last_age_minutes": [4],
+                    "mf_temperature_c_latest": [12.0],
+                    "mf_core_observation_count_morning": [6],
+                    "mf_last_age_minutes": [60],
+                }
+            )
+
+            probability, _, _ = predict_frame(path, primary_only)
+            self.assertTrue(np.isfinite(probability).all())
+
+            unavailable_primary = primary_only.copy()
+            unavailable_primary["mf_core_observation_count_morning"] = 0
+            with self.assertRaisesRegex(ValueError, "unavailable mf_"):
+                predict_frame(path, unavailable_primary)
+
     def test_comparison_binds_actual_dataset_and_model_files(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -235,17 +302,41 @@ class TraverseModelTests(unittest.TestCase):
             dataset_hash = sha256_file(dataset)
             common = {
                 "split": {"test_years": [2024], "test_rows": 1},
-                "provenance": {"dataset_sha256": dataset_hash},
+                "provenance": {
+                    "dataset_sha256": dataset_hash,
+                    "source_sha256": {"traverse_model.py": "same"},
+                },
             }
             baseline = root / "baseline.joblib"
             variant = root / "variant.joblib"
+            spatial = root / "spatial.joblib"
             save_fitted_model(
                 baseline, {**common, "role": "baseline"}, ["cal_doy_sin"]
             )
             save_fitted_model(
                 variant, {**common, "role": "variant"}, ["cal_doy_sin"]
             )
+            save_fitted_model(
+                spatial, {**common, "role": "spatial"}, ["cal_doy_sin"]
+            )
             load_validated_inputs(dataset, baseline, variant)
+            _, _, reference, candidate, _ = load_validated_inputs(
+                dataset, variant, spatial
+            )
+            self.assertEqual(reference[0]["role"], "variant")
+            self.assertEqual(candidate[0]["role"], "spatial")
+
+            changed_source = {
+                **common,
+                "provenance": {
+                    **common["provenance"],
+                    "source_sha256": {"traverse_model.py": "changed"},
+                },
+                "role": "spatial",
+            }
+            save_fitted_model(spatial, changed_source, ["cal_doy_sin"])
+            with self.assertRaisesRegex(ValueError, "source revisions"):
+                load_validated_inputs(dataset, variant, spatial)
 
             changed = pd.read_csv(dataset)
             changed["label"] = 1
@@ -264,9 +355,9 @@ class TraverseModelTests(unittest.TestCase):
                 "label_config_sha256": sha256_json(label),
                 "feature_schema_sha256": sha256_json(features),
                 "piou_station_id": "456",
-                "piou_source_schema": "pioupiou-archive-v1-kmh",
+                "piou_source_schema": PIOU_SOURCE_SCHEMA,
                 "weather_station_id": "73329001",
-                "weather_source_schema": "meteofrance-base-hourly-v1",
+                "weather_source_schema": METEO_FRANCE_SOURCE_SCHEMA,
             }
             save_fitted_model(
                 model_path,
@@ -301,6 +392,73 @@ class TraverseModelTests(unittest.TestCase):
                 validate_prepared_contract(model_path, incompatible)
             with self.assertRaisesRegex(ValueError, "modeled column mismatch"):
                 validate_prepared_contract(model_path, row.drop(columns=["cal_doy_sin"]))
+
+            old_contract = dict(contract)
+            old_contract["piou_source_schema"] = "pioupiou-archive-v1-kmh"
+            save_fitted_model(
+                model_path,
+                {
+                    "role": "variant",
+                    "label": label,
+                    "input_contract": old_contract,
+                },
+                features,
+            )
+            with self.assertRaisesRegex(ValueError, "unsupported source schema"):
+                validate_prepared_contract(model_path, row)
+
+    def test_spatial_prepared_row_is_bound_to_station_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            model_path = Path(directory) / "spatial.joblib"
+            label = asdict(LabelConfig())
+            features = [
+                "cal_doy_sin",
+                "mfs_belley_temperature_c_latest",
+            ]
+            manifest = [{"slug": "airport", "station_id": "73329001"}]
+            contract = {
+                "schema_version": 3,
+                "dataset_sha256": "dataset-hash",
+                "label_config_sha256": sha256_json(label),
+                "feature_schema_sha256": sha256_json(features),
+                "piou_station_id": "456",
+                "piou_source_schema": "pioupiou-archive-v2-kmh-location-guard",
+                "weather_station_id": "73329001",
+                "weather_source_schema": METEO_FRANCE_SOURCE_SCHEMA,
+                "weather_station_manifest": manifest,
+                "weather_station_manifest_sha256": sha256_json(manifest),
+            }
+            save_fitted_model(
+                model_path,
+                {"role": "spatial", "label": label, "input_contract": contract},
+                features,
+            )
+            row = pd.DataFrame(
+                {
+                    "date": ["2024-07-01"],
+                    "cal_doy_sin": [0.0],
+                    "mfs_belley_temperature_c_latest": [18.0],
+                    "meta_contract_schema_version": [3],
+                    "meta_dataset_sha256": ["dataset-hash"],
+                    "meta_feature_cutoff_local": ["2024-07-01T12:00:00+02:00"],
+                    "meta_feature_prepared_at_utc": ["2024-07-01T10:00:00+00:00"],
+                    "meta_feature_schema_sha256": [contract["feature_schema_sha256"]],
+                    "meta_label_config_sha256": [contract["label_config_sha256"]],
+                    "meta_model_sha256": [sha256_file(model_path)],
+                    "meta_piou_source_schema": [contract["piou_source_schema"]],
+                    "meta_piou_station_id": ["456"],
+                    "meta_weather_source_schema": [contract["weather_source_schema"]],
+                    "meta_weather_station_id": ["73329001"],
+                    "meta_weather_station_manifest_sha256": [
+                        contract["weather_station_manifest_sha256"]
+                    ],
+                }
+            )
+            validate_prepared_contract(model_path, row)
+            incompatible = row.copy()
+            incompatible["meta_weather_station_manifest_sha256"] = "wrong"
+            with self.assertRaisesRegex(ValueError, "contract mismatch"):
+                validate_prepared_contract(model_path, incompatible)
 
 
 if __name__ == "__main__":

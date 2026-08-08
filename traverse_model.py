@@ -8,9 +8,10 @@ import io
 import json
 import math
 import os
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 import tempfile
-from typing import Any, Iterable, Sequence
+from typing import Any
 import warnings
 
 import joblib
@@ -30,6 +31,7 @@ from sklearn.metrics import (
     f1_score,
     fbeta_score,
     log_loss,
+    precision_recall_curve,
     precision_score,
     recall_score,
     roc_auc_score,
@@ -41,6 +43,7 @@ from sklearn.preprocessing import StandardScaler
 FEATURE_PREFIXES = {
     "baseline": ("cal_",),
     "variant": ("cal_", "piou_", "mf_"),
+    "spatial": ("cal_", "piou_", "mf_", "mfs_"),
 }
 RANDOM_STATE = 20260807
 
@@ -71,17 +74,26 @@ def classification_metrics(
     tn, fp, fn, tp = confusion_matrix(y, predicted, labels=[0, 1]).ravel()
     recall = recall_score(y, predicted, zero_division=0)
     specificity = tn / (tn + fp) if tn + fp else 0.0
+    curve_precision, curve_recall, _ = precision_recall_curve(y, probabilities)
+    eligible_precision = curve_precision[curve_recall >= 0.60]
     return {
         "rows": float(len(y)),
         "prevalence": float(np.mean(y)) if len(y) else float("nan"),
         "average_precision": float(average_precision_score(y, probabilities)),
-        "roc_auc": float(roc_auc_score(y, probabilities)) if np.unique(y).size == 2 else float("nan"),
+        "roc_auc": (
+            float(roc_auc_score(y, probabilities))
+            if np.unique(y).size == 2
+            else float("nan")
+        ),
         "brier_score": float(brier_score_loss(y, probabilities)),
         "log_loss": float(log_loss(y, probabilities, labels=[0, 1])),
         "threshold": float(threshold),
         "accuracy": float(accuracy_score(y, predicted)),
         "balanced_accuracy": float(balanced_accuracy_score(y, predicted)),
         "precision": float(precision_score(y, predicted, zero_division=0)),
+        "precision_at_recall_0_60": (
+            float(np.max(eligible_precision)) if len(eligible_precision) else 0.0
+        ),
         "recall": float(recall),
         "specificity": float(specificity),
         "f1": float(f1_score(y, predicted, zero_division=0)),
@@ -427,7 +439,7 @@ def predict_loaded(
     payload: dict[str, Any], pipeline: Pipeline, frame: pd.DataFrame
 ) -> tuple[np.ndarray, np.ndarray, list[list[tuple[str, float]]]]:
     feature_names = list(payload["feature_names"])
-    if payload["role"] == "variant":
+    if payload["role"] in {"variant", "spatial"}:
         guard_columns = {
             "piou_observation_count_morning",
             "piou_last_age_minutes",

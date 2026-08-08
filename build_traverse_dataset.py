@@ -2,8 +2,8 @@
 """Build one leakage-free noon-prediction row per local day.
 
 PiouPiou wind observations provide both the morning predictors and the Traverse
-label. Official hourly CHAMBERY-AIX observations are streamed from the public
-Meteo-France climatology archives and cached after filtering to one station.
+label. Official hourly Meteo-France observations provide a compact spatial view
+of the air mass around Lac du Bourget.
 """
 
 from __future__ import annotations
@@ -20,10 +20,11 @@ import sys
 import urllib.parse
 import urllib.request
 from collections import defaultdict
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -32,13 +33,19 @@ import numpy as np
 DATA_GOUV_DATASET_ID = "6569b4473bedf2e7abad3b72"
 DATA_GOUV_API = f"https://www.data.gouv.fr/api/1/datasets/{DATA_GOUV_DATASET_ID}/"
 PIOU_ARCHIVE_API = "https://api.pioupiou.fr/v1/archive"
-PIOU_SOURCE_SCHEMA = "pioupiou-archive-v1-kmh"
-METEO_FRANCE_SOURCE_SCHEMA = "meteofrance-base-hourly-v1"
-METEO_FRANCE_STATION_ID = "73329001"
-METEO_FRANCE_STATION_NAME = "CHAMBERY-AIX"
+PIOU_SOURCE_SCHEMA = "pioupiou-archive-v2-kmh-location-guard"
+METEO_FRANCE_SOURCE_SCHEMA = "meteofrance-base-hourly-v2-location-guard"
+PIOU_STATION_ID = 456
+PIOU_LATITUDE = 45.701731
+PIOU_LONGITUDE = 5.883505
+PIOU_MAX_LOCATION_DISTANCE_KM = 1.0
+WEATHER_MAX_LOCATION_DISTANCE_KM = 1.0
 MONTHLY_NAME = re.compile(r"^\d{4}-\d{2}\.csv$")
 PIOU_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T")
-RESOURCE_PERIOD = re.compile(r"HOR_departement_73_periode_(\d{4})-(\d{4})")
+RESOURCE_PERIOD = re.compile(
+    r"HOR_departement_(?P<department>\d{2})_periode_"
+    r"(?P<start_year>\d{4})-(?P<end_year>\d{4})"
+)
 USER_AGENT = "pioupiou-traverse-research/1.0"
 QUALITY_ACCEPTED = {"0", "1", "9"}
 WEATHER_RAW_FIELDS = (
@@ -66,6 +73,85 @@ WEATHER_CACHE_FIELDS = (
     "ALTI",
     "AAAAMMJJHH",
 ) + tuple(item for field in WEATHER_RAW_FIELDS for item in (field, f"Q{field}"))
+
+
+@dataclass(frozen=True)
+class WeatherStation:
+    slug: str
+    station_id: str
+    department: str
+    name: str
+    latitude: float
+    longitude: float
+    elevation_m: int
+    role: str
+
+
+WEATHER_STATIONS = (
+    WeatherStation(
+        "airport",
+        "73329001",
+        "73",
+        "CHAMBERY-AIX",
+        45.641333,
+        5.877833,
+        235,
+        "lake south / airport control",
+    ),
+    WeatherStation(
+        "mont_du_chat",
+        "73051001",
+        "73",
+        "MONT DU CHAT",
+        45.660500,
+        5.821500,
+        1496,
+        "west ridge",
+    ),
+    WeatherStation(
+        "belley",
+        "01034004",
+        "01",
+        "BELLEY",
+        45.769333,
+        5.688000,
+        330,
+        "west lowland",
+    ),
+    WeatherStation(
+        "meythet",
+        "74182001",
+        "74",
+        "MEYTHET",
+        45.928167,
+        6.094000,
+        455,
+        "north synoptic",
+    ),
+    WeatherStation(
+        "montmelian",
+        "73171002",
+        "73",
+        "MONTMELIAN",
+        45.493833,
+        6.049167,
+        264,
+        "south valley",
+    ),
+)
+PRIMARY_WEATHER_STATION = WEATHER_STATIONS[0]
+SPATIAL_STATION_SUFFIXES = (
+    "core_observation_count_morning",
+    "last_age_minutes",
+    "temperature_c_latest",
+    "temperature_c_delta_morning",
+    "dewpoint_c_latest",
+    "relative_humidity_pct_latest",
+    "wind_speed_10m_ms_latest",
+    "wind_direction_latest_sin",
+    "wind_direction_latest_cos",
+    "west_component_mean_ms",
+)
 
 
 @dataclass(frozen=True)
@@ -106,6 +192,7 @@ class WeatherResource:
     end_year: int
     last_modified: str
     filesize: int | None
+    department: str
 
 
 def open_url(url: str, timeout: int = 120):
@@ -166,7 +253,11 @@ def label_config_from_payload(payload: Any) -> LabelConfig:
         elif name in integer_fields:
             if type(value) is not int:
                 raise ValueError(f"label_config.{name} must be an integer")
-        elif isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        elif (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
             raise ValueError(f"label_config.{name} must be a finite number")
     config = LabelConfig(**payload)
     validate_label_config(config)
@@ -177,11 +268,75 @@ def parse_piou_timestamp(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def distance_km(
+    latitude: float,
+    longitude: float,
+    reference_latitude: float,
+    reference_longitude: float,
+) -> float:
+    """Great-circle distance between two WGS84 points."""
+    radius_km = 6371.0
+    latitude_radians = math.radians(latitude)
+    reference_latitude_radians = math.radians(reference_latitude)
+    latitude_delta = latitude_radians - reference_latitude_radians
+    longitude_delta = math.radians(longitude - reference_longitude)
+    haversine = math.sin(latitude_delta / 2.0) ** 2 + (
+        math.cos(reference_latitude_radians)
+        * math.cos(latitude_radians)
+        * math.sin(longitude_delta / 2.0) ** 2
+    )
+    return 2.0 * radius_km * math.asin(math.sqrt(haversine))
+
+
+def valid_piou_location(latitude: object, longitude: object) -> bool:
+    """Accept observations only while PP456 is physically at the lake site."""
+    try:
+        latitude_value = float(latitude)
+        longitude_value = float(longitude)
+    except (TypeError, ValueError):
+        return False
+    if not math.isfinite(latitude_value) or not math.isfinite(longitude_value):
+        return False
+    return (
+        distance_km(
+            latitude_value,
+            longitude_value,
+            PIOU_LATITUDE,
+            PIOU_LONGITUDE,
+        )
+        <= PIOU_MAX_LOCATION_DISTANCE_KM
+    )
+
+
+def valid_weather_station_location(
+    latitude: object, longitude: object, station: WeatherStation
+) -> bool:
+    """Accept an official observation only at its configured station site."""
+    try:
+        latitude_value = float(latitude)
+        longitude_value = float(longitude)
+    except (TypeError, ValueError):
+        return False
+    if not math.isfinite(latitude_value) or not math.isfinite(longitude_value):
+        return False
+    return (
+        distance_km(
+            latitude_value,
+            longitude_value,
+            station.latitude,
+            station.longitude,
+        )
+        <= WEATHER_MAX_LOCATION_DISTANCE_KM
+    )
+
+
 def piou_observations_from_archive_payload(
     payload: dict[str, Any], local_timezone: ZoneInfo
 ) -> list[PiouObservation]:
     required = {
         "time",
+        "latitude",
+        "longitude",
         "wind_speed_min",
         "wind_speed_avg",
         "wind_speed_max",
@@ -194,6 +349,10 @@ def piou_observations_from_archive_payload(
     observations: list[PiouObservation] = []
     for values in payload.get("data", []):
         if any(values[indexes[name]] is None for name in required):
+            continue
+        if not valid_piou_location(
+            values[indexes["latitude"]], values[indexes["longitude"]]
+        ):
             continue
         timestamp_utc = parse_piou_timestamp(str(values[indexes["time"]]))
         observations.append(
@@ -238,11 +397,21 @@ def monthly_files(input_dir: Path) -> list[Path]:
     return sorted(path for path in input_dir.iterdir() if MONTHLY_NAME.match(path.name))
 
 
-def read_month(path: Path, local_timezone: ZoneInfo) -> list[PiouObservation]:
+def read_month(
+    path: Path,
+    local_timezone: ZoneInfo,
+    counters: dict[str, int] | None = None,
+) -> list[PiouObservation]:
     observations: list[PiouObservation] = []
     with path.open(newline="") as handle:
         for row in csv.reader(handle):
             if len(row) < 8 or not PIOU_TIME.match(row[0]):
+                continue
+            if counters is not None:
+                counters["source_rows"] += 1
+            if not valid_piou_location(row[1], row[2]):
+                if counters is not None:
+                    counters["invalid_location_rows"] += 1
                 continue
             timestamp_utc = parse_piou_timestamp(row[0])
             observations.append(
@@ -277,13 +446,17 @@ def deduplicate_piou_observations(
 def iter_unique_piou(
     input_dir: Path, local_timezone: ZoneInfo
 ) -> tuple[Iterator[PiouObservation], dict[str, int]]:
-    counters = {"source_rows": 0, "unique_rows": 0, "duplicate_timestamps": 0}
+    counters = {
+        "source_rows": 0,
+        "invalid_location_rows": 0,
+        "unique_rows": 0,
+        "duplicate_timestamps": 0,
+    }
 
     def generate() -> Iterator[PiouObservation]:
         previous: PiouObservation | None = None
         for path in monthly_files(input_dir):
-            for observation in read_month(path, local_timezone):
-                counters["source_rows"] += 1
+            for observation in read_month(path, local_timezone, counters):
                 if previous is not None and observation.timestamp_utc == previous.timestamp_utc:
                     counters["duplicate_timestamps"] += 1
                     if observation != previous:
@@ -524,7 +697,9 @@ def calendar_features(local_day: date) -> dict[str, float | int | str]:
     }
 
 
-def build_piou_days(input_dir: Path, config: LabelConfig) -> tuple[dict[date, dict[str, Any]], dict[str, int]]:
+def build_piou_days(
+    input_dir: Path, config: LabelConfig
+) -> tuple[dict[date, dict[str, Any]], dict[str, int]]:
     timezone_local = ZoneInfo(config.timezone_name)
     iterator, counters = iter_unique_piou(input_dir, timezone_local)
     rows: dict[date, dict[str, Any]] = {}
@@ -568,15 +743,20 @@ def resource_from_payload(payload: dict[str, Any]) -> WeatherResource | None:
         resource_id=str(payload["id"]),
         title=title,
         url=str(payload["url"]),
-        start_year=int(match.group(1)),
-        end_year=int(match.group(2)),
+        start_year=int(match.group("start_year")),
+        end_year=int(match.group("end_year")),
         last_modified=str(payload.get("last_modified") or ""),
         filesize=int(payload["filesize"]) if payload.get("filesize") is not None else None,
+        department=match.group("department"),
     )
 
 
 def discover_weather_resources(
-    cache_dir: Path, start_year: int, end_year: int, offline: bool
+    cache_dir: Path,
+    start_year: int,
+    end_year: int,
+    offline: bool,
+    departments: Sequence[str] = ("73",),
 ) -> list[WeatherResource]:
     cache_dir.mkdir(parents=True, exist_ok=True)
     metadata_cache = cache_dir / "meteofrance_hourly_resources.json"
@@ -592,25 +772,41 @@ def discover_weather_resources(
     selected = [
         item
         for item in resources
-        if item is not None and item.start_year <= end_year and item.end_year >= start_year
+        if item is not None
+        and item.department in departments
+        and item.start_year <= end_year
+        and item.end_year >= start_year
     ]
     if not selected:
-        raise ValueError(f"No department-73 hourly resources cover {start_year}-{end_year}")
-    return sorted(selected, key=lambda item: item.start_year)
+        raise ValueError(
+            f"No hourly resources for departments {sorted(departments)} "
+            f"cover {start_year}-{end_year}"
+        )
+    return sorted(selected, key=lambda item: (item.department, item.start_year))
 
 
-def filtered_resource_path(cache_dir: Path, resource: WeatherResource, station_id: str) -> Path:
-    return cache_dir / f"meteofrance_{station_id}_{resource.resource_id}.csv.gz"
+def filtered_resources_path(
+    cache_dir: Path, resource: WeatherResource, station_ids: Sequence[str]
+) -> Path:
+    station_ids = tuple(sorted(set(station_ids)))
+    if len(station_ids) == 1:
+        return cache_dir / f"meteofrance_{station_ids[0]}_{resource.resource_id}.csv.gz"
+    station_token = "-".join(station_ids)
+    return cache_dir / f"meteofrance_{station_token}_{resource.resource_id}.csv.gz"
 
 
-def cache_station_resource(
+def cache_weather_resource(
     cache_dir: Path,
     resource: WeatherResource,
-    station_id: str,
+    station_ids: Sequence[str],
     refresh: bool,
     offline: bool,
-) -> tuple[Path, int]:
-    target = filtered_resource_path(cache_dir, resource, station_id)
+) -> tuple[Path, dict[str, int]]:
+    """Download one department archive once and retain the selected stations."""
+    station_ids = tuple(sorted(set(station_ids)))
+    if not station_ids:
+        raise ValueError("At least one weather station ID is required")
+    target = filtered_resources_path(cache_dir, resource, station_ids)
     sidecar = target.with_name(target.name + ".metadata.json")
     if target.exists() and not refresh:
         if not sidecar.exists():
@@ -625,17 +821,22 @@ def cache_station_resource(
                 cached.get("resource_id") == resource.resource_id
                 and cached.get("last_modified") == resource.last_modified
                 and cached.get("url") == resource.url
-                and cached.get("station_id") == station_id
+                and cached.get("station_ids") == list(station_ids)
                 and cached.get("cache_sha256") == sha256_file(target)
             )
         if cache_matches:
+            counts = {station_id: 0 for station_id in station_ids}
             with gzip.open(target, "rt", newline="") as handle:
-                row_count = sum(1 for _ in csv.DictReader(handle))
-            if row_count == 0:
-                raise ValueError(f"Station {station_id} was absent from cached {resource.title}")
+                for row in csv.DictReader(handle):
+                    station_id = row["NUM_POSTE"]
+                    if station_id in counts:
+                        counts[station_id] += 1
+            row_count = sum(counts.values())
             if int(cached.get("row_count", -1)) != row_count:
                 raise ValueError(f"Weather cache row count changed for {target}")
-            return target, row_count
+            if cached.get("resource_rows") != counts:
+                raise ValueError(f"Weather cache station counts changed for {target}")
+            return target, counts
         if offline:
             raise ValueError(f"Weather cache metadata or checksum mismatch for {target}")
     if offline:
@@ -646,7 +847,8 @@ def cache_station_resource(
         file=sys.stderr,
         flush=True,
     )
-    row_count = 0
+    counts = {station_id: 0 for station_id in station_ids}
+    selected_ids = set(station_ids)
     try:
         with open_url(resource.url, timeout=300) as response:
             with gzip.GzipFile(fileobj=response, mode="rb") as compressed:
@@ -661,10 +863,17 @@ def cache_station_resource(
                         writer = csv.DictWriter(output, fieldnames=WEATHER_CACHE_FIELDS)
                         writer.writeheader()
                         for row in reader:
-                            if row["NUM_POSTE"] == station_id:
-                                writer.writerow({field: row.get(field, "") for field in WEATHER_CACHE_FIELDS})
-                                row_count += 1
+                            station_id = row["NUM_POSTE"]
+                            if station_id in selected_ids:
+                                writer.writerow(
+                                    {
+                                        field: row.get(field, "")
+                                        for field in WEATHER_CACHE_FIELDS
+                                    }
+                                )
+                                counts[station_id] += 1
         temporary.replace(target)
+        row_count = sum(counts.values())
         cache_sha256 = sha256_file(target)
         sidecar.write_text(
             json.dumps(
@@ -672,8 +881,9 @@ def cache_station_resource(
                     "resource_id": resource.resource_id,
                     "last_modified": resource.last_modified,
                     "url": resource.url,
-                    "station_id": station_id,
+                    "station_ids": list(station_ids),
                     "row_count": row_count,
+                    "resource_rows": counts,
                     "cache_sha256": cache_sha256,
                 },
                 indent=2,
@@ -684,10 +894,12 @@ def cache_station_resource(
     finally:
         if temporary.exists():
             temporary.unlink()
-    print(f"Cached {row_count:,} rows for station {station_id}.", file=sys.stderr, flush=True)
-    if row_count == 0:
-        raise ValueError(f"Station {station_id} was absent from {resource.title}")
-    return target, row_count
+    print(
+        f"Cached {sum(counts.values()):,} rows for {len(station_ids)} station(s).",
+        file=sys.stderr,
+        flush=True,
+    )
+    return target, counts
 
 
 def weather_value(row: dict[str, str], field: str) -> float:
@@ -698,15 +910,27 @@ def weather_value(row: dict[str, str], field: str) -> float:
     return float(raw)
 
 
-def iter_cached_weather(paths: Sequence[Path], timezone_local: ZoneInfo) -> Iterator[dict[str, Any]]:
+def iter_cached_weather(
+    paths: Sequence[Path],
+    timezone_local: ZoneInfo,
+    station: WeatherStation | None = None,
+) -> Iterator[dict[str, Any]]:
     for path in paths:
         with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
             for row in csv.DictReader(handle):
+                if station is not None:
+                    if row["NUM_POSTE"] != station.station_id:
+                        continue
+                    if not valid_weather_station_location(
+                        row["LAT"], row["LON"], station
+                    ):
+                        continue
                 timestamp_utc = datetime.strptime(row["AAAAMMJJHH"], "%Y%m%d%H").replace(
                     tzinfo=timezone.utc
                 )
                 values = {field: weather_value(row, field) for field in WEATHER_RAW_FIELDS}
                 yield {
+                    "station_id": row["NUM_POSTE"],
                     "timestamp_utc": timestamp_utc,
                     "timestamp_local": timestamp_utc.astimezone(timezone_local),
                     **values,
@@ -720,11 +944,6 @@ def finite_values(observations: Sequence[dict[str, Any]], field: str) -> list[fl
 def first_last_delta(observations: Sequence[dict[str, Any]], field: str) -> float:
     values = finite_values(observations, field)
     return values[-1] - values[0] if len(values) >= 2 else float("nan")
-
-
-def latest(observations: Sequence[dict[str, Any]], field: str) -> float:
-    values = finite_values(observations, field)
-    return values[-1] if values else float("nan")
 
 
 def latest_recent(
@@ -823,12 +1042,16 @@ def weather_features(
 
 
 def build_weather_days(
-    paths: Sequence[Path], config: LabelConfig, start_year: int, end_year: int
+    paths: Sequence[Path],
+    config: LabelConfig,
+    start_year: int,
+    end_year: int,
+    station: WeatherStation | None = None,
 ) -> dict[date, dict[str, float]]:
     timezone_local = ZoneInfo(config.timezone_name)
     grouped: dict[date, list[dict[str, Any]]] = defaultdict(list)
     seen: dict[datetime, dict[str, Any]] = {}
-    for observation in iter_cached_weather(paths, timezone_local):
+    for observation in iter_cached_weather(paths, timezone_local, station):
         local_timestamp = observation["timestamp_local"]
         if not start_year <= local_timestamp.year <= end_year:
             continue
@@ -862,6 +1085,100 @@ def build_weather_days(
     }
 
 
+def compact_station_features(
+    station: WeatherStation,
+    weather: dict[str, float] | None,
+    maximum_age_minutes: float,
+) -> dict[str, float]:
+    """Keep a small, consistent feature block for one optional station."""
+    prefix = f"mfs_{station.slug}_"
+    weather = weather or {}
+    age = float(weather.get("mf_last_age_minutes", float("nan")))
+    fresh = np.isfinite(age) and 0.0 <= age <= maximum_age_minutes
+    output: dict[str, float] = {}
+    for suffix in SPATIAL_STATION_SUFFIXES:
+        value = float(weather.get(f"mf_{suffix}", float("nan")))
+        if suffix == "core_observation_count_morning":
+            value = value if np.isfinite(value) else 0.0
+        elif suffix != "last_age_minutes" and not fresh:
+            value = float("nan")
+        output[f"{prefix}{suffix}"] = value
+    if station.slug == "meythet":
+        pressure = float(weather.get("mf_pressure_msl_hpa_latest", float("nan")))
+        output[f"{prefix}pressure_msl_hpa_latest"] = (
+            pressure if fresh else float("nan")
+        )
+    return output
+
+
+def spatial_weather_features(
+    optional_weather: dict[str, dict[str, float] | None],
+    maximum_age_minutes: float,
+) -> dict[str, float]:
+    """Create the compact optional-station feature block."""
+    output: dict[str, float] = {}
+    for station in WEATHER_STATIONS[1:]:
+        output.update(
+            compact_station_features(
+                station,
+                optional_weather.get(station.slug),
+                maximum_age_minutes,
+            )
+        )
+    return output
+
+
+def load_station_weather(
+    cache_dir: Path,
+    config: LabelConfig,
+    start_year: int,
+    end_year: int,
+    refresh: bool,
+    offline: bool,
+    stations: Sequence[WeatherStation] = WEATHER_STATIONS,
+) -> tuple[
+    dict[str, dict[date, dict[str, float]]],
+    list[WeatherResource],
+    dict[str, dict[str, int]],
+    dict[str, str],
+]:
+    """Load daily weather features while downloading each archive only once."""
+    departments = tuple(sorted({station.department for station in stations}))
+    resources = discover_weather_resources(
+        cache_dir, start_year, end_year, offline, departments=departments
+    )
+    paths = {station.slug: [] for station in stations}
+    resource_rows: dict[str, dict[str, int]] = {}
+    cache_sha256: dict[str, str] = {}
+    for resource in resources:
+        resource_stations = [
+            station for station in stations if station.department == resource.department
+        ]
+        path, counts = cache_weather_resource(
+            cache_dir,
+            resource,
+            [station.station_id for station in resource_stations],
+            refresh,
+            offline,
+        )
+        resource_rows[resource.resource_id] = counts
+        cache_sha256[resource.resource_id] = sha256_file(path)
+        for station in resource_stations:
+            if counts[station.station_id] > 0:
+                paths[station.slug].append(path)
+    daily = {
+        station.slug: build_weather_days(
+            paths[station.slug],
+            config,
+            start_year,
+            end_year,
+            station=station,
+        )
+        for station in stations
+    }
+    return daily, resources, resource_rows, cache_sha256
+
+
 def write_dataset(rows: Sequence[dict[str, Any]], output: Path) -> list[str]:
     output.parent.mkdir(parents=True, exist_ok=True)
     leading = ["date", "year", "label"]
@@ -874,7 +1191,12 @@ def write_dataset(rows: Sequence[dict[str, Any]], output: Path) -> list[str]:
         for row in rows:
             writer.writerow(
                 {
-                    field: "" if isinstance(row.get(field), float) and not np.isfinite(row[field]) else row.get(field, "")
+                    field: (
+                        ""
+                        if isinstance(row.get(field), float)
+                        and not np.isfinite(row[field])
+                        else row.get(field, "")
+                    )
                     for field in fields
                 }
             )
@@ -898,7 +1220,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--metadata-output", type=Path, default=Path("artifacts/traverse_daily.metadata.json")
     )
     parser.add_argument("--cache-dir", type=Path, default=Path("pioudata/.weather_cache"))
-    parser.add_argument("--station-id", default=METEO_FRANCE_STATION_ID)
     parser.add_argument("--timezone", default="Europe/Paris")
     parser.add_argument("--cutoff-hour", type=int, default=12)
     parser.add_argument("--target-end-hour", type=int, default=20)
@@ -947,45 +1268,73 @@ def main() -> int:
         raise SystemExit("No usable PiouPiou days were produced")
     start_year = min(item.year for item in piou_days)
     end_year = max(item.year for item in piou_days)
-    resources = discover_weather_resources(args.cache_dir, start_year, end_year, args.offline)
-    cache_paths: list[Path] = []
-    cache_counts: dict[str, int] = {}
-    cache_sha256: dict[str, str] = {}
-    for resource in resources:
-        path, count = cache_station_resource(
-            args.cache_dir,
-            resource,
-            args.station_id,
-            args.refresh_weather,
-            args.offline,
-        )
-        cache_paths.append(path)
-        cache_counts[resource.resource_id] = count
-        cache_sha256[resource.resource_id] = sha256_file(path)
-    weather_days = build_weather_days(cache_paths, config, start_year, end_year)
+    weather_days, resources, cache_counts, cache_sha256 = load_station_weather(
+        args.cache_dir,
+        config,
+        start_year,
+        end_year,
+        args.refresh_weather,
+        args.offline,
+    )
     rows: list[dict[str, Any]] = []
     days_without_weather = 0
     days_with_stale_weather = 0
+    airport_distance_km = round(
+        distance_km(
+            PIOU_LATITUDE,
+            PIOU_LONGITUDE,
+            PRIMARY_WEATHER_STATION.latitude,
+            PRIMARY_WEATHER_STATION.longitude,
+        ),
+        2,
+    )
     for local_day, row in sorted(piou_days.items()):
-        weather = weather_days.get(local_day)
-        if weather is None:
+        airport = weather_days[PRIMARY_WEATHER_STATION.slug].get(local_day)
+        if airport is None:
             days_without_weather += 1
             continue
-        weather_age = weather.get("mf_last_age_minutes", float("nan"))
+        weather_age = airport.get("mf_last_age_minutes", float("nan"))
         if not np.isfinite(weather_age) or (
             weather_age > config.maximum_weather_feature_age_minutes
         ):
             days_with_stale_weather += 1
             continue
+        optional_weather = {
+            station.slug: weather_days[station.slug].get(local_day)
+            for station in WEATHER_STATIONS[1:]
+        }
         rows.append(
             {
                 **row,
-                **weather,
-                "meta_weather_station_id": args.station_id,
-                "meta_weather_station_distance_km": 6.73,
+                **airport,
+                **spatial_weather_features(
+                    optional_weather,
+                    config.maximum_weather_feature_age_minutes,
+                ),
+                "meta_weather_station_id": PRIMARY_WEATHER_STATION.station_id,
+                "meta_weather_station_distance_km": airport_distance_km,
             }
         )
     fields = write_dataset(rows, args.output)
+    station_coverage: dict[str, dict[str, Any]] = {}
+    for station in WEATHER_STATIONS[1:]:
+        feature = f"mfs_{station.slug}_temperature_c_latest"
+        by_year: dict[str, dict[str, float | int]] = {}
+        for year in sorted({int(row["year"]) for row in rows}):
+            year_rows = [row for row in rows if int(row["year"]) == year]
+            available = sum(int(np.isfinite(row[feature])) for row in year_rows)
+            by_year[str(year)] = {
+                "available_days": available,
+                "total_days": len(year_rows),
+                "fraction": available / len(year_rows),
+            }
+        available = sum(int(np.isfinite(row[feature])) for row in rows)
+        station_coverage[station.slug] = {
+            "available_days": available,
+            "total_days": len(rows),
+            "fraction": available / len(rows),
+            "by_year": by_year,
+        }
     metadata = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "output": str(args.output),
@@ -996,8 +1345,13 @@ def main() -> int:
         "label_config": asdict(config),
         "pioupiou": {
             "input_dir": str(args.input_dir),
-            "station_id": 456,
+            "station_id": PIOU_STATION_ID,
             "source_schema": PIOU_SOURCE_SCHEMA,
+            "expected_coordinates": [PIOU_LATITUDE, PIOU_LONGITUDE],
+            "maximum_location_distance_km": PIOU_MAX_LOCATION_DISTANCE_KM,
+            "location_policy": (
+                "missing or off-site coordinates are rejected before labels and features"
+            ),
             "license_url": "http://developers.pioupiou.fr/data-licensing",
             "attribution": "(c) contributors of the OpenWindMap wind network",
             "counters": counters,
@@ -1005,31 +1359,47 @@ def main() -> int:
         "meteofrance": {
             "dataset_id": DATA_GOUV_DATASET_ID,
             "dataset_api_url": DATA_GOUV_API,
-            "station_id": args.station_id,
-            "station_name": METEO_FRANCE_STATION_NAME,
+            "station_id": PRIMARY_WEATHER_STATION.station_id,
+            "station_name": PRIMARY_WEATHER_STATION.name,
             "source_schema": METEO_FRANCE_SOURCE_SCHEMA,
-            "station_coordinates": [45.641333, 5.877833],
-            "station_elevation_m": 235,
+            "station_coordinates": [
+                PRIMARY_WEATHER_STATION.latitude,
+                PRIMARY_WEATHER_STATION.longitude,
+            ],
+            "station_elevation_m": PRIMARY_WEATHER_STATION.elevation_m,
+            "maximum_location_distance_km": WEATHER_MAX_LOCATION_DISTANCE_KM,
+            "location_policy": (
+                "observations with missing or off-site coordinates are rejected"
+            ),
+            "station_manifest": [asdict(station) for station in WEATHER_STATIONS],
             "license": "Licence Ouverte 2.0",
             "resource_rows": cache_counts,
             "resource_cache_sha256": cache_sha256,
             "resources": [asdict(item) for item in resources],
-            "quality_policy": "empty values and quality code 2 are missing; codes 0, 1, and 9 are accepted",
+            "station_temperature_coverage": station_coverage,
+            "quality_policy": (
+                "empty values and quality code 2 are missing; "
+                "codes 0, 1, and 9 are accepted"
+            ),
             "days_without_weather": days_without_weather,
             "days_with_stale_weather": days_with_stale_weather,
-            "feature_window": f"[{config.weather_morning_start_hour:02d}:00,{config.cutoff_hour:02d}:00) Europe/Paris",
+            "feature_window": (
+                f"[{config.weather_morning_start_hour:02d}:00,"
+                f"{config.cutoff_hour:02d}:00) Europe/Paris"
+            ),
         },
     }
     args.metadata_output.parent.mkdir(parents=True, exist_ok=True)
     args.metadata_output.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+    positive_rows = sum(int(row["label"]) for row in rows)
     print(
         json.dumps(
             {
                 "output": str(args.output),
                 "metadata": str(args.metadata_output),
                 "rows": len(rows),
-                "positives": counters["positive_days"],
-                "positive_rate": counters["positive_days"] / len(rows),
+                "positives": positive_rows,
+                "positive_rate": positive_rows / len(rows),
                 "days_without_weather": days_without_weather,
                 "days_with_stale_weather": days_with_stale_weather,
             },

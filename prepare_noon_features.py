@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import math
+from dataclasses import asdict
 from datetime import date, datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -14,16 +15,17 @@ from zoneinfo import ZoneInfo
 from build_traverse_dataset import (
     METEO_FRANCE_SOURCE_SCHEMA,
     PIOU_SOURCE_SCHEMA,
-    build_weather_days,
-    cache_station_resource,
+    PRIMARY_WEATHER_STATION,
+    WEATHER_STATIONS,
     calendar_features,
     deduplicate_piou_observations,
-    discover_weather_resources,
     fetch_piou_morning,
     label_config_from_payload,
+    load_station_weather,
     local_boundary,
     piou_features,
     read_month,
+    spatial_weather_features,
 )
 from traverse_model import load_artifact_with_sha256, sha256_json
 
@@ -104,8 +106,9 @@ def main() -> int:
         model_payload, _, model_sha256 = load_artifact_with_sha256(args.model)
     except ValueError as error:
         raise SystemExit(str(error)) from error
-    if model_payload.get("role") != "variant":
-        raise SystemExit("Noon preparation currently requires the wind-plus-weather variant")
+    role = model_payload.get("role")
+    if role not in {"variant", "spatial"}:
+        raise SystemExit("Noon preparation requires a weather-based model")
     try:
         config = label_config_from_payload(model_payload.get("label"))
     except ValueError as error:
@@ -123,7 +126,8 @@ def main() -> int:
     }
     if not isinstance(contract, dict) or not required_contract.issubset(contract):
         raise SystemExit("Model is missing its input contract")
-    if contract["schema_version"] != 2:
+    expected_schema_version = 3 if role == "spatial" else 2
+    if contract["schema_version"] != expected_schema_version:
         raise SystemExit("Unsupported model input contract version")
     if contract["label_config_sha256"] != sha256_json(model_payload["label"]):
         raise SystemExit("Model label contract fingerprint does not match its payload")
@@ -135,6 +139,12 @@ def main() -> int:
         contract["weather_source_schema"] != METEO_FRANCE_SOURCE_SCHEMA
     ):
         raise SystemExit("Model source schema is not supported by this preparer")
+    if role == "spatial":
+        station_manifest = [asdict(station) for station in WEATHER_STATIONS]
+        if contract.get("weather_station_manifest") != station_manifest or contract.get(
+            "weather_station_manifest_sha256"
+        ) != sha256_json(station_manifest):
+            raise SystemExit("Model weather station manifest is not supported")
     piou_station_id = str(args.piou_station_id or contract["piou_station_id"])
     weather_station_id = str(
         args.weather_station_id or contract["weather_station_id"]
@@ -161,25 +171,20 @@ def main() -> int:
     if piou is None:
         raise SystemExit("insufficient_data: missing or stale pre-noon PiouPiou observations")
 
-    resources = discover_weather_resources(
-        args.cache_dir, local_day.year, local_day.year, args.offline_weather
+    stations = WEATHER_STATIONS if role == "spatial" else (PRIMARY_WEATHER_STATION,)
+    weather_days, _, _, _ = load_station_weather(
+        args.cache_dir,
+        config,
+        local_day.year,
+        local_day.year,
+        args.refresh_weather,
+        args.offline_weather,
+        stations=stations,
     )
-    weather_paths = []
-    for resource in resources:
-        path, _ = cache_station_resource(
-            args.cache_dir,
-            resource,
-            weather_station_id,
-            args.refresh_weather,
-            args.offline_weather,
-        )
-        weather_paths.append(path)
-    weather = build_weather_days(
-        weather_paths, config, local_day.year, local_day.year
-    ).get(local_day)
-    if weather is None:
+    airport = weather_days[PRIMARY_WEATHER_STATION.slug].get(local_day)
+    if airport is None:
         raise SystemExit("insufficient_data: no pre-noon Météo-France observations")
-    weather_age = weather.get("mf_last_age_minutes", float("nan"))
+    weather_age = airport.get("mf_last_age_minutes", float("nan"))
     if not math.isfinite(weather_age) or (
         weather_age > config.maximum_weather_feature_age_minutes
     ):
@@ -190,28 +195,44 @@ def main() -> int:
     prepared = {
         **calendar_features(local_day),
         **piou,
-        **weather,
+        **airport,
     }
+    if role == "spatial":
+        prepared.update(
+            spatial_weather_features(
+                {
+                    station.slug: weather_days[station.slug].get(local_day)
+                    for station in WEATHER_STATIONS[1:]
+                },
+                config.maximum_weather_feature_age_minutes,
+            )
+        )
     try:
         row = bind_to_model_schema(prepared, list(model_payload["feature_names"]))
     except ValueError as error:
         raise SystemExit(str(error)) from error
     row.update(
         {
-        "meta_feature_cutoff_local": cutoff.isoformat(),
-        "meta_contract_schema_version": contract["schema_version"],
-        "meta_dataset_sha256": contract["dataset_sha256"],
-        "meta_feature_schema_sha256": contract["feature_schema_sha256"],
-        "meta_feature_prepared_at_utc": datetime.now(timezone.utc).isoformat(),
-        "meta_label_config_sha256": contract["label_config_sha256"],
-        "meta_model_sha256": model_sha256,
-        "meta_piou_source_schema": contract["piou_source_schema"],
-        "meta_piou_station_id": piou_station_id,
-        "meta_piou_source": "local_archive" if args.piou_input_dir else "public_archive_api",
-        "meta_weather_source_schema": contract["weather_source_schema"],
-        "meta_weather_station_id": weather_station_id,
+            "meta_feature_cutoff_local": cutoff.isoformat(),
+            "meta_contract_schema_version": contract["schema_version"],
+            "meta_dataset_sha256": contract["dataset_sha256"],
+            "meta_feature_schema_sha256": contract["feature_schema_sha256"],
+            "meta_feature_prepared_at_utc": datetime.now(timezone.utc).isoformat(),
+            "meta_label_config_sha256": contract["label_config_sha256"],
+            "meta_model_sha256": model_sha256,
+            "meta_piou_source_schema": contract["piou_source_schema"],
+            "meta_piou_station_id": piou_station_id,
+            "meta_piou_source": (
+                "local_archive" if args.piou_input_dir else "public_archive_api"
+            ),
+            "meta_weather_source_schema": contract["weather_source_schema"],
+            "meta_weather_station_id": weather_station_id,
         }
     )
+    if role == "spatial":
+        row["meta_weather_station_manifest_sha256"] = contract[
+            "weather_station_manifest_sha256"
+        ]
     write_feature_row(row, args.output)
     print(
         json.dumps(

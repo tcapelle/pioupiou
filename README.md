@@ -10,34 +10,20 @@ warning service. The model is deliberately simple: a scikit-learn
 `ColumnTransformer` and L2-regularized `LogisticRegression`, using only
 PiouPiou and weather observations timestamped before noon.
 
-## Result
+## Current experiment
 
-The locked test period is 2024–2025 (725 days, 144 positive Traverse days). The
-decision threshold was selected on 2023 and was not retuned on the test years.
+The previous single-station result is superseded. PP456 stopped reporting valid
+lake coordinates on 16 August 2025, but its archive later resumed with null
+coordinates. Those off-site or unverified rows entered the old evaluation.
+The builder now rejects every PiouPiou observation with missing coordinates or
+more than 1 km from the lake site before creating either features or labels.
 
-| Model | Average precision | Balanced accuracy | Precision | Recall | Brier score |
-|---|---:|---:|---:|---:|---:|
-| Seasonal baseline | 0.239 | 0.565 | 0.238 | 0.625 | 0.158 |
-| Morning wind + weather | **0.422** | **0.697** | **0.373** | **0.674** | **0.142** |
-
-The full model improves average precision by 0.183. A paired day bootstrap puts
-the 95% interval at approximately 0.108–0.255. On the test set it detects 97 of
-144 events, misses 47, and raises 163 false alerts. That is useful predictive
-signal, but the 37.3% alert precision is not good enough for a safety-critical
-warning without further validation.
-
-The final scikit-learn implementation is a migration reproduction, not a
-second untouched test: the 2024–2025 results had already been inspected with
-the predecessor implementation. Against those frozen artifacts, it selected
-the same regularization, changed zero test decisions, and differed in
-probability by at most `6.31e-6`.
-
-The tracked runs and exact comparison are in the [W&B experiment
-report](https://wandb.ai/capecape/pioupiou-traverse/reports/Noon-Traverse-sklearn-model-%E2%80%94-verified-result--VmlldzoxNzY4NDk1Mg==).
-The final [baseline](https://wandb.ai/capecape/pioupiou-traverse/runs/4xnotqyg)
-and [weather-enriched](https://wandb.ai/capecape/pioupiou-traverse/runs/zdiyvhms)
-runs contain the checksummed daily dataset, full source snapshot, environment,
-and serialized model as W&B artifacts.
+The corrected enriched table contains 3,149 usable days and 601 positive days.
+The chronological test slice contains 592 days and 117 positives from 2024
+through 15 August 2025. A fresh controlled comparison of the airport-only
+weather model against the spatial-station model is specified in
+`experiments/20260807-spatial-stations/plan.md`. Until that comparison is run,
+the old model metrics and artifacts should not be treated as current results.
 
 ## What counts as a Traverse
 
@@ -67,52 +53,67 @@ leakage-free row per usable local day. It:
 
 1. reads only `pioudata/YYYY-MM.csv` files and ignores the overlapping aggregate
    CSVs;
-2. removes 622 duplicate timestamps and converts UTC to `Europe/Paris`;
+2. removes 556 duplicate timestamps, rejects 55,004 missing/off-site location
+   rows, and converts UTC to `Europe/Paris`;
 3. derives pre-noon wind summaries and the afternoon label;
-4. discovers current department-73 resources through the data.gouv.fr API;
-5. streams the large Météo-France archives, caching only station `73329001`
-   (`CHAMBERY-AIX`); and
-6. adds morning temperature, humidity, dew point, pressure, rain, cloud,
-   radiation, sunshine, visibility, and regional wind quantities through
-   11:00 local.
+4. discovers current department 01, 73, and 74 resources through data.gouv.fr;
+5. streams each large Météo-France archive once and caches only the five chosen
+   stations; and
+6. adds the existing airport weather block plus compact ridge, west, north, and
+   south observations through 11:00 local.
+
+The station manifest is deliberately short:
+
+| Role | Station | ID | Distance from PP456 |
+|---|---|---:|---:|
+| airport control | CHAMBERY-AIX | 73329001 | 6.73 km |
+| west ridge | MONT DU CHAT | 73051001 | 6.65 km |
+| west lowland | BELLEY | 01034004 | 16.93 km |
+| north synoptic | MEYTHET | 74182001 | 30.00 km |
+| south valley | MONTMELIAN | 73171002 | 26.47 km |
 
 CHAMBERY-AIX is 6.73 km from the PiouPiou and is at nearly the same elevation.
+Each official observation must remain within 1 km of its configured station
+site, so a reused or moved station ID cannot silently enter the table.
 Values with Météo-France quality code `2` (doubtful) are treated as missing;
 codes `0`, `1`, and `9` are accepted. Missing features are imputed from the
 training years only and get an explicit missingness indicator. Imputation,
 standardization, missingness indicators, fitting, prediction, and metrics all
 use scikit-learn APIs; models are serialized with `joblib`.
-Both source caches are checksummed. A prediction is refused when the latest
-PiouPiou reading is more than 30 minutes old or the latest hourly weather
+Filtered weather caches are checksummed, and the Piou source files are
+Git-tracked. A prediction is refused when the latest PiouPiou reading is more
+than 30 minutes old or the latest hourly weather
 reading with valid temperature, humidity, wind speed, and wind direction is
 more than 90 minutes old. Prepared rows are also bound to the exact model,
 feature contract, and station IDs before they can be scored.
 
-The first build transfers roughly 171 MB of compressed public archives. Its
-station-only cache is about 7 MB; later builds use that cache.
+The first build transfers roughly 390 MB of compressed public archives. The
+filtered station cache is about 14 MB; later builds use that verified cache.
 
 ## Reproduce
 
-Python 3.9 or newer is required.
+Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
 
 ```bash
-python3 -m pip install -r requirements.txt
-python3 build_traverse_dataset.py
+uv sync
+uv run python build_traverse_dataset.py
 
-python3 train_traverse_model.py \
-  --dataset artifacts/traverse_daily.csv \
-  --role baseline \
-  --wandb-name exp-20260807-noon-traverse-baseline \
-  --wandb-tags exp/20260807-noon-traverse,baseline
-
-python3 train_traverse_model.py \
+uv run python train_traverse_model.py \
   --dataset artifacts/traverse_daily.csv \
   --role variant \
-  --wandb-name exp-20260807-noon-traverse-variant \
-  --wandb-tags exp/20260807-noon-traverse,variant
+  --wandb-name exp-20260807-spatial-stations-control \
+  --wandb-tags exp/20260807-spatial-stations,control
 
-python3 compare_traverse_models.py
-python3 -m unittest discover -v
+uv run python train_traverse_model.py \
+  --dataset artifacts/traverse_daily.csv \
+  --role spatial \
+  --wandb-name exp-20260807-spatial-stations-spatial \
+  --wandb-tags exp/20260807-spatial-stations,spatial
+
+uv run python compare_traverse_models.py \
+  --reference artifacts/traverse_model_variant.joblib \
+  --candidate artifacts/traverse_model_spatial.joblib
+uv run python -m unittest discover -v
 ```
 
 If `WANDB_API_KEY` is absent, training records an offline run. Pass
@@ -121,20 +122,20 @@ If `WANDB_API_KEY` is absent, training records an offline run. Pass
 Score an already prepared historical noon row:
 
 ```bash
-python3 predict_traverse.py --date 2025-09-21
+uv run python predict_traverse.py --date 2025-07-21
 ```
 
 Prepare an unlabeled row exactly as it exists at noon, then score it:
 
 ```bash
 # Reproducible historical example using the checked local archives.
-python3 prepare_noon_features.py \
-  --date 2025-09-21 \
+uv run python prepare_noon_features.py \
+  --date 2025-07-21 \
   --piou-input-dir pioudata \
   --offline-weather \
-  --output artifacts/noon_features_2025-09-21.csv
-python3 predict_traverse.py \
-  --features artifacts/noon_features_2025-09-21.csv
+  --output artifacts/noon_features_2025-07-21.csv
+uv run python predict_traverse.py \
+  --features artifacts/noon_features_2025-07-21.csv
 ```
 
 Without `--piou-input-dir`, preparation fetches the morning directly from the
@@ -149,8 +150,9 @@ model; they are not causal explanations.
 
 `joblib` uses pickle semantics. Load only model bundles produced by this
 project from a trusted location. For a downloaded artifact, pass a trusted
-out-of-band digest with `predict_traverse.py --model-sha256 ...`; the digest is
-checked against one immutable byte snapshot before deserialization and scoring.
+out-of-band digest with
+`uv run python predict_traverse.py --model-sha256 ...`; the digest is checked
+against one immutable byte snapshot before deserialization and scoring.
 
 ## Files
 
@@ -163,6 +165,8 @@ checked against one immutable byte snapshot before deserialization and scoring.
 - `predict_traverse.py`: inference for a prepared feature row.
 - `experiments/20260807-noon-traverse/plan.md`: hypothesis, falsifier, run IDs,
   and review record.
+- `experiments/20260807-spatial-stations/plan.md`: corrected multi-station
+  ablation plan.
 - `tests/`: unit tests for time boundaries, label persistence, weather units,
   preprocessing, model persistence, feed contracts, and metrics.
 

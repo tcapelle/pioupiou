@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Train the calendar baseline or full noon Traverse logistic classifier."""
+"""Train a noon Traverse logistic classifier for one feature role."""
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 from importlib import metadata as importlib_metadata
 import json
 import os
@@ -20,6 +21,7 @@ import threadpoolctl
 from build_traverse_dataset import (
     METEO_FRANCE_SOURCE_SCHEMA,
     PIOU_SOURCE_SCHEMA,
+    WEATHER_STATIONS,
     label_config_from_payload,
 )
 from traverse_model import (
@@ -39,7 +41,9 @@ PROVENANCE_FILES = (
     "train_traverse_model.py",
     "predict_traverse.py",
     "compare_traverse_models.py",
-    "requirements.txt",
+    ".python-version",
+    "pyproject.toml",
+    "uv.lock",
     "tests/test_build_traverse_dataset.py",
     "tests/test_traverse_model.py",
 )
@@ -76,9 +80,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Dataset metadata JSON (default: DATASET with .metadata.json suffix)",
     )
-    parser.add_argument("--role", choices=("baseline", "variant"), required=True)
+    parser.add_argument(
+        "--role", choices=("baseline", "variant", "spatial"), required=True
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
-    parser.add_argument("--smoke", action="store_true", help="Use an earlier reduced split and one L2 value")
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Use an earlier reduced split and one L2 value",
+    )
     parser.add_argument("--wandb-project", default="pioupiou-traverse")
     parser.add_argument("--wandb-name", required=True)
     parser.add_argument("--wandb-tags", default="")
@@ -119,13 +129,6 @@ def main() -> int:
         label_config_from_payload(dataset_metadata.get("label_config"))
     except ValueError as error:
         raise SystemExit(f"Invalid dataset label contract: {error}") from error
-    bundle, metrics = train_and_evaluate(
-        frame,
-        args.role,
-        smoke=args.smoke,
-        label_config=dataset_metadata["label_config"],
-    )
-    artifact = bundle["metadata"]
     piou_station_id = dataset_metadata.get("pioupiou", {}).get("station_id")
     weather_station_id = dataset_metadata.get("meteofrance", {}).get("station_id")
     if piou_station_id is None or weather_station_id is None:
@@ -135,8 +138,19 @@ def main() -> int:
         != METEO_FRANCE_SOURCE_SCHEMA
     ):
         raise SystemExit("Dataset metadata has an unsupported source schema")
+    station_manifest = dataset_metadata.get("meteofrance", {}).get("station_manifest")
+    expected_station_manifest = [asdict(station) for station in WEATHER_STATIONS]
+    if args.role == "spatial" and station_manifest != expected_station_manifest:
+        raise SystemExit("Spatial training requires the configured weather station manifest")
+    bundle, metrics = train_and_evaluate(
+        frame,
+        args.role,
+        smoke=args.smoke,
+        label_config=dataset_metadata["label_config"],
+    )
+    artifact = bundle["metadata"]
     artifact["input_contract"] = {
-        "schema_version": 2,
+        "schema_version": 3 if args.role == "spatial" else 2,
         "dataset_sha256": dataset_sha256,
         "label_config_sha256": sha256_json(dataset_metadata["label_config"]),
         "feature_schema_sha256": sha256_json(artifact["feature_names"]),
@@ -145,6 +159,13 @@ def main() -> int:
         "weather_station_id": str(weather_station_id),
         "weather_source_schema": METEO_FRANCE_SOURCE_SCHEMA,
     }
+    if args.role == "spatial":
+        artifact["input_contract"].update(
+            {
+                "weather_station_manifest": station_manifest,
+                "weather_station_manifest_sha256": sha256_json(station_manifest),
+            }
+        )
     artifact["dataset"] = str(args.dataset)
     runtime, installed_packages = runtime_provenance()
     artifact["runtime"] = runtime
@@ -197,6 +218,13 @@ def main() -> int:
             "preprocessing/output_features": float(classifier.coef_.shape[1]),
             "validation/selected_threshold": float(artifact["model"]["threshold"]),
         }
+    )
+    for station, coverage in dataset_metadata["meteofrance"].get(
+        "station_temperature_coverage", {}
+    ).items():
+        flat[f"data/{station}_temperature_coverage"] = float(coverage["fraction"])
+    flat["data/piou_invalid_location_rows"] = float(
+        dataset_metadata["pioupiou"]["counters"].get("invalid_location_rows", 0)
     )
     mode = args.wandb_mode
     if mode == "auto":
@@ -255,6 +283,9 @@ def main() -> int:
                 },
                 "metrics_backend": "sklearn.metrics",
                 "model_schema_version": 2,
+                "input_contract_schema_version": artifact["input_contract"][
+                    "schema_version"
+                ],
                 "model_serialization": "joblib",
                 "runtime_versions": {
                     key: runtime[key]

@@ -11,7 +11,12 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from build_traverse_dataset import label_config_from_payload, local_boundary
+from build_traverse_dataset import (
+    METEO_FRANCE_SOURCE_SCHEMA,
+    PIOU_SOURCE_SCHEMA,
+    label_config_from_payload,
+    local_boundary,
+)
 from traverse_model import (
     load_artifact_with_sha256,
     predict_loaded,
@@ -29,11 +34,21 @@ def validate_prepared_contract(
         else load_artifact_with_sha256(model_path)
     )
     row = pd_row
-    if payload.get("role") != "variant":
-        raise ValueError("invalid_model: prepared rows require the variant model")
+    role = payload.get("role")
+    if role not in {"variant", "spatial"}:
+        raise ValueError("invalid_model: prepared rows require a weather-based model")
     contract = payload.get("input_contract")
-    if not isinstance(contract, dict) or contract.get("schema_version") != 2:
+    expected_schema_version = 3 if role == "spatial" else 2
+    if (
+        not isinstance(contract, dict)
+        or contract.get("schema_version") != expected_schema_version
+    ):
         raise ValueError("invalid_model: missing or unsupported input contract")
+    if (
+        contract.get("piou_source_schema") != PIOU_SOURCE_SCHEMA
+        or contract.get("weather_source_schema") != METEO_FRANCE_SOURCE_SCHEMA
+    ):
+        raise ValueError("invalid_model: unsupported source schema")
     required = {
         "date",
         "meta_contract_schema_version",
@@ -48,6 +63,8 @@ def validate_prepared_contract(
         "meta_weather_source_schema",
         "meta_weather_station_id",
     }
+    if role == "spatial":
+        required.add("meta_weather_station_manifest_sha256")
     missing = sorted(required.difference(row.columns))
     if missing:
         raise ValueError(f"incompatible_features: missing contract columns {missing}")
@@ -55,7 +72,7 @@ def validate_prepared_contract(
     supplied_features = {
         name
         for name in row.columns
-        if name.startswith(("cal_", "piou_", "mf_"))
+        if name.startswith(("cal_", "piou_", "mf_", "mfs_"))
     }
     if supplied_features != expected_features:
         missing_features = sorted(expected_features - supplied_features)
@@ -78,6 +95,12 @@ def validate_prepared_contract(
         "meta_weather_source_schema": contract["weather_source_schema"],
         "meta_weather_station_id": str(contract["weather_station_id"]),
     }
+    if role == "spatial":
+        station_manifest = contract.get("weather_station_manifest")
+        station_manifest_sha256 = contract.get("weather_station_manifest_sha256")
+        if station_manifest_sha256 != sha256_json(station_manifest):
+            raise ValueError("invalid_model: weather station manifest fingerprint mismatch")
+        expected["meta_weather_station_manifest_sha256"] = station_manifest_sha256
     mismatches = [
         name for name, expected_value in expected.items() if value(name) != expected_value
     ]

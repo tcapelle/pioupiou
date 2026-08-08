@@ -3,6 +3,9 @@
 **Date:** 2026-08-07
 **Question:** Can a simple model using only information available before local noon predict a sustained 10-knot westerly wind at Aix-les-Bains that afternoon?
 
+**Status:** Superseded by `20260807-spatial-stations` after correcting the
+PP456 location history. Its metrics must not be used for the current dataset.
+
 ## Hypothesis
 
 An L2-regularized logistic regression combining morning PiouPiou wind and
