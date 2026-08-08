@@ -256,7 +256,7 @@ def main() -> int:
                 "fit_intercept": True,
                 "class_weight": None,
                 "tol": 1e-8,
-                "max_iter": 2000,
+                "max_iter": 3000,
                 "random_state": 20260807,
                 "preprocessing": {
                     "imputer": "median",

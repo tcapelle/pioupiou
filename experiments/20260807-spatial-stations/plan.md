@@ -6,7 +6,8 @@ Question: Do compact, pre-noon observations from stations around Lac du
 Bourget improve afternoon Traverse prediction over the current lake sensor plus
 CHAMBERY-AIX model?
 
-Status: smoke gate passed on 2026-08-08; full runs are next.
+Status: first full candidate hit the convergence guard; a convergence-only fix
+is being re-smoked before both full roles are rerun.
 
 ## Data-quality prerequisite
 
@@ -159,6 +160,13 @@ decision and health key with finite values.
 
 The smoke pair is only an execution/metric gate; it is not the experiment
 verdict. Full-run commands remain unchanged.
+
+The first full spatial attempt stopped before W&B initialization because the
+`l2=0.01` search folds for 2021 and 2022 reached the 2,000-iteration ceiling.
+A diagnostic showed convergence at 2,261 and 2,481 iterations. The only fix is
+raising `max_iter` to 3,000; estimator, tolerance, candidates, data, and split
+remain fixed. Both smoke roles and both full roles will be rerun from the same
+fixed source revision. The already-finished full control is superseded.
 
 ## Runs
 

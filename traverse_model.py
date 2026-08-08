@@ -166,7 +166,7 @@ def build_pipeline(l2: float, feature_names: Sequence[str]) -> Pipeline:
                     penalty="l2",
                     C=1.0 / float(l2),
                     solver="lbfgs",
-                    max_iter=2000,
+                    max_iter=3000,
                     tol=1e-8,
                     random_state=RANDOM_STATE,
                 ),
