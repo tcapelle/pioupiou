@@ -12,18 +12,26 @@ PiouPiou and weather observations timestamped before noon.
 
 ## Current experiment
 
-The previous single-station result is superseded. PP456 stopped reporting valid
-lake coordinates on 16 August 2025, but its archive later resumed with null
-coordinates. Those off-site or unverified rows entered the old evaluation.
-The builder now rejects every PiouPiou observation with missing coordinates or
-more than 1 km from the lake site before creating either features or labels.
+PP456 stopped reporting valid lake coordinates on 16 August 2025, but its
+archive later resumed with null coordinates. The builder now rejects every
+PiouPiou observation with missing coordinates or more than 1 km from the lake
+site before creating either features or labels. The corrected enriched table
+contains 3,149 usable days and 601 positive days; the chronological test slice
+contains 592 days and 117 positives from 2024 through 15 August 2025.
 
-The corrected enriched table contains 3,149 usable days and 601 positive days.
-The chronological test slice contains 592 days and 117 positives from 2024
-through 15 August 2025. A fresh controlled comparison of the airport-only
-weather model against the spatial-station model is specified in
-`experiments/20260807-spatial-stations/plan.md`. Until that comparison is run,
-the old model metrics and artifacts should not be treated as current results.
+The controlled station ablation is complete. Adding the four optional stations
+improved test average precision from 0.4248 to 0.4592 (+0.0344), with a paired
+bootstrap 95% interval of [-0.0129, +0.0874]. However, recall at the threshold
+selected on 2023 fell from 0.6752 to 0.3761, and precision while maintaining at
+least 0.60 recall fell from 0.4286 to 0.3923. The spatial model therefore
+**failed promotion criteria**: the `variant` lake/airport model remains the
+default, while `spatial` is retained as an opt-in research role.
+
+The full design, run IDs, metrics, and decision are in the
+[experiment record](experiments/20260807-spatial-stations/plan.md) and the
+[W&B comparison report](https://wandb.ai/capecape/pioupiou-traverse/reports/Traverse-spatial-station-ablation-%E2%80%94-2026-08-08--VmlldzoxNzY4ODM5Mg==).
+This is a retrospective ablation on an already inspected test period, not an
+unbiased estimate of performance on future seasons.
 
 ## What counts as a Traverse
 
@@ -166,7 +174,7 @@ against one immutable byte snapshot before deserialization and scoring.
 - `experiments/20260807-noon-traverse/plan.md`: hypothesis, falsifier, run IDs,
   and review record.
 - `experiments/20260807-spatial-stations/plan.md`: corrected multi-station
-  ablation plan.
+  ablation, W&B runs, metrics, and promotion decision.
 - `tests/`: unit tests for time boundaries, label persistence, weather units,
   preprocessing, model persistence, feed contracts, and metrics.
 

@@ -6,8 +6,8 @@ Question: Do compact, pre-noon observations from stations around Lac du
 Bourget improve afternoon Traverse prediction over the current lake sensor plus
 CHAMBERY-AIX model?
 
-Status: full pair and independent review complete; proposed verdict awaits user
-approval before it is recorded below.
+Status: complete — failed promotion criteria; retain the spatial role as an
+opt-in research model.
 
 ## Data-quality prerequisite
 
@@ -163,10 +163,10 @@ verdict. Full-run commands remain unchanged.
 
 The first full spatial attempt stopped before W&B initialization because the
 `l2=0.01` search folds for 2021 and 2022 reached the 2,000-iteration ceiling.
-A diagnostic showed convergence at 2,261 and 2,481 iterations. The only fix is
+A diagnostic showed convergence at 2,261 and 2,481 iterations. The only fix was
 raising `max_iter` to 3,000; estimator, tolerance, candidates, data, and split
-remain fixed. Both smoke roles and both full roles will be rerun from the same
-fixed source revision. The already-finished full control is superseded.
+remained fixed. Both smoke roles and both full roles were rerun from the same
+fixed source revision. The earlier full control is superseded.
 
 The fixed-revision smoke reruns are the table above. Both are finished, have
 all required finite metrics, and share commit `de6e976`. The initial smoke run
@@ -181,9 +181,9 @@ IDs `03jhej6j` and `y49svbm2`, plus full control `4m8lms29`, remain in W&B with
 3. Fresh full control.
 4. Fresh full spatial model.
 
-All runs use W&B project `pioupiou-traverse` and tag
-`exp/20260807-spatial-stations`. Smoke runs must finish and log the required
-metrics before the full pair is launched.
+All runs used W&B project `pioupiou-traverse` and tag
+`exp/20260807-spatial-stations`. The smoke runs finished and logged the required
+metrics before the full pair was launched.
 
 Required W&B keys are `test/average_precision`, `test/balanced_accuracy`,
 `test/recall`, `test/precision`, `test/brier_score`,
@@ -229,3 +229,37 @@ Secondary:
   policy match exactly.
 - Tests prove strict pre-noon filtering, coordinate validation, optional-feed
   behavior, and feature-role isolation.
+
+## Result
+
+Verdict: **fail for model promotion**. Keep the `variant` control as the
+default model and retain `spatial` only as an opt-in research role.
+
+| Test metric | Control (`variant`) | Spatial | Difference |
+|---|---:|---:|---:|
+| average precision | 0.4248 | 0.4592 | +0.0344 |
+| balanced accuracy | 0.6955 | 0.6259 | -0.0696 |
+| precision | 0.3692 | 0.4272 | +0.0580 |
+| recall | 0.6752 | 0.3761 | -0.2991 |
+| Brier score | 0.1427 | 0.1387 | -0.0040 |
+| precision at recall >= 0.60 | 0.4286 | 0.3923 | -0.0363 |
+| false positives | 135 | 59 | -76 |
+| false negatives | 38 | 73 | +35 |
+
+The primary average-precision gain clears the preregistered +0.03 target. It
+is also positive in both test years: +0.0386 in 2024 and +0.0261 in 2025. The
+paired-day bootstrap estimate is +0.0344, with 2.5th, 50th, and 97.5th
+percentiles of -0.0129, +0.0350, and +0.0874. The distribution is centered
+above zero, so the written falsifier is not triggered, but the interval still
+includes zero and does not establish a robust out-of-sample gain.
+
+The operational success criteria fail. At the threshold selected only on 2023,
+spatial recall falls from 0.6752 to 0.3761, below the required 0.60. Its best
+precision while maintaining recall of at least 0.60 also falls from 0.4286 to
+0.3923. The new stations therefore contain useful ranking signal, but this
+experiment does not support replacing the current model or its artifact.
+
+The tabular ingestion, location guards, and opt-in feature role are retained so
+the signal can be studied without changing the default predictor. Any follow-up
+feature or model change needs a new preregistered comparison; changing only the
+decision threshold would not address the weaker precision-recall trade-off.
