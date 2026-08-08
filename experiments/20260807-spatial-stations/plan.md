@@ -6,8 +6,7 @@ Question: Do compact, pre-noon observations from stations around Lac du
 Bourget improve afternoon Traverse prediction over the current lake sensor plus
 CHAMBERY-AIX model?
 
-Status: first full candidate hit the convergence guard; a convergence-only fix
-is being re-smoked before both full roles are rerun.
+Status: fixed-revision smoke gate passed; both full roles are next.
 
 ## Data-quality prerequisite
 
@@ -155,8 +154,8 @@ decision and health key with finite values.
 
 | Role | W&B run | Test AP | Recall | Precision at recall ≥ 0.60 |
 |---|---|---:|---:|---:|
-| control | [03jhej6j](https://wandb.ai/capecape/pioupiou-traverse/runs/03jhej6j) | 0.3526 | 0.6462 | 0.3514 |
-| spatial | [y49svbm2](https://wandb.ai/capecape/pioupiou-traverse/runs/y49svbm2) | 0.3664 | 0.8769 | 0.3630 |
+| control | [w9tbaqc4](https://wandb.ai/capecape/pioupiou-traverse/runs/w9tbaqc4) | 0.3526 | 0.6462 | 0.3514 |
+| spatial | [xjasgopb](https://wandb.ai/capecape/pioupiou-traverse/runs/xjasgopb) | 0.3664 | 0.8769 | 0.3630 |
 
 The smoke pair is only an execution/metric gate; it is not the experiment
 verdict. Full-run commands remain unchanged.
@@ -167,6 +166,11 @@ A diagnostic showed convergence at 2,261 and 2,481 iterations. The only fix is
 raising `max_iter` to 3,000; estimator, tolerance, candidates, data, and split
 remain fixed. Both smoke roles and both full roles will be rerun from the same
 fixed source revision. The already-finished full control is superseded.
+
+The fixed-revision smoke reruns are the table above. Both are finished, have
+all required finite metrics, and share commit `de6e976`. The initial smoke run
+IDs `03jhej6j` and `y49svbm2`, plus full control `4m8lms29`, remain in W&B with
+`superseded` and `pre-convergence-fix` tags.
 
 ## Runs
 
