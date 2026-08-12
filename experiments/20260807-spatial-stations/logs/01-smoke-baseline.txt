@@ -1,0 +1,26 @@
+Command:
+uv run python train_traverse_model.py --dataset artifacts/traverse_daily.csv --role variant --smoke --wandb-mode online --wandb-name exp-20260807-spatial-stations-smoke-baseline --wandb-tags smoke,exp/20260807-spatial-stations,baseline
+
+Exit code: 0
+W&B run: https://wandb.ai/capecape/pioupiou-traverse/runs/03jhej6j
+State: finished
+Required metrics missing: none
+
+{
+  "C": 1.0,
+  "l2": 1.0,
+  "model_path": "artifacts/traverse_model_variant-smoke.joblib",
+  "model_sha256": "423a2ee3a76a85d8f135f3c62235990085faa2bf6c4848097d1e0a8dc5ebfe31",
+  "role": "variant",
+  "smoke": true,
+  "test": {
+    "average_precision": 0.35256280541611834,
+    "balanced_accuracy": 0.6758166491043204,
+    "brier_score": 0.13673834474737856,
+    "precision": 0.328125,
+    "precision_at_recall_0_60": 0.35135135135135137,
+    "recall": 0.6461538461538462,
+    "rows": 357.0
+  },
+  "threshold": 0.2273738032714141
+}

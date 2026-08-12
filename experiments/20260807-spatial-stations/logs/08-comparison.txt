@@ -1,0 +1,23 @@
+Command:
+uv run python compare_traverse_models.py --dataset artifacts/traverse_daily.csv --reference artifacts/traverse_model_variant.joblib --candidate artifacts/traverse_model_spatial.joblib --output artifacts/traverse_comparison_spatial.json
+
+Exit code: 0
+
+{
+  "metric": "average_precision",
+  "comparison": "spatial_minus_variant",
+  "test_rows": 592,
+  "point_difference": 0.034389101719876025,
+  "bootstrap": {
+    "method": "paired iid resampling of held-out local days with replacement",
+    "seed": 20260807,
+    "requested_replicates": 2000,
+    "completed_replicates": 2000,
+    "quantiles": {
+      "2.5%": -0.012855721842893577,
+      "50%": 0.03503362815993588,
+      "97.5%": 0.0873677637378891
+    }
+  },
+  "dataset_sha256": "888055438f67efd8d99df45faecd556827caea748587e9fb9cc0ed12f8bb6729"
+}
