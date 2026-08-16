@@ -14,6 +14,19 @@ change.
   production-grade defensive machinery.
 - Keep changes focused and make experimental assumptions explicit.
 
+## Human collaboration
+
+Aggressively ask the human for input on how to build things. Ask early rather
+than silently making product, research, or architectural decisions.
+
+- Whenever a change adds complexity, first explain why it is needed, offer the
+  simplest viable options, and ask which direction to take.
+- Ask before introducing new abstractions, dependencies, workflows, data
+  sources, infrastructure, or long-lived interfaces.
+- Surface tradeoffs and uncertain assumptions while they are still cheap to
+  change.
+- Handle obvious, low-impact implementation details autonomously.
+
 ## Python
 
 Use `uv` for dependency management and every Python command.
