@@ -45,6 +45,7 @@ FEATURE_PREFIXES = {
     "variant": ("cal_", "piou_", "mf_"),
     "spatial": ("cal_", "piou_", "mf_", "mfs_"),
     "nwp": ("cal_", "piou_", "mf_", "nwp_"),
+    "same_day": ("cal_", "piou_", "mf_", "lag_"),
 }
 RANDOM_STATE = 20260807
 
@@ -268,16 +269,29 @@ def load_daily_dataset(path: Path | str) -> pd.DataFrame:
         raise ValueError(f"Dataset is missing required columns: {sorted(missing)}")
     frame["date"] = pd.to_datetime(frame["date"], errors="raise")
     frame["year"] = pd.to_numeric(frame["year"], errors="raise").astype(int)
-    if frame["date"].duplicated().any():
-        duplicates = frame.loc[frame["date"].duplicated(), "date"].dt.strftime("%Y-%m-%d")
-        raise ValueError(f"Dataset contains duplicate dates: {duplicates.head(5).tolist()}")
+    identity = ["date"]
+    if "issue_minutes" in frame:
+        frame["issue_minutes"] = pd.to_numeric(
+            frame["issue_minutes"], errors="raise"
+        ).astype(int)
+        if (~frame["issue_minutes"].between(0, 1439)).any():
+            raise ValueError("Dataset issue_minutes values must be between 0 and 1439")
+        identity.append("issue_minutes")
+    if frame.duplicated(identity).any():
+        duplicates = frame.loc[frame.duplicated(identity), identity].head(5)
+        if identity == ["date"]:
+            formatted = duplicates["date"].dt.strftime("%Y-%m-%d").tolist()
+            raise ValueError(f"Dataset contains duplicate dates: {formatted}")
+        raise ValueError(
+            f"Dataset contains duplicate sample identities: {duplicates.to_dict('records')}"
+        )
     expected_year = frame["date"].dt.year
     if not np.array_equal(frame["year"].to_numpy(), expected_year.to_numpy()):
         raise ValueError("Dataset year column does not match the date column")
     frame["label"] = pd.to_numeric(frame["label"], errors="coerce")
     frame = frame[frame["label"].isin([0, 1])].copy()
     frame["label"] = frame["label"].astype(int)
-    return frame.sort_values("date").reset_index(drop=True)
+    return frame.sort_values(identity).reset_index(drop=True)
 
 
 def split_dataset(
@@ -333,6 +347,15 @@ def train_and_evaluate(
             predict_probabilities(pipeline, subset, feature_names),
             threshold,
         )
+    if "issue_minutes" in test.columns:
+        for issue_minutes in sorted(test["issue_minutes"].unique()):
+            subset = test[test["issue_minutes"] == issue_minutes]
+            hour, minute = divmod(int(issue_minutes), 60)
+            metrics[f"test_time_{hour:02d}{minute:02d}"] = classification_metrics(
+                subset["label"].to_numpy(dtype=int),
+                predict_probabilities(pipeline, subset, feature_names),
+                threshold,
+            )
     classifier = pipeline.named_steps["classifier"]
     metadata = {
         "schema_version": 2,
@@ -366,6 +389,11 @@ def train_and_evaluate(
             "train_rows": len(train),
             "validation_rows": len(validation),
             "test_rows": len(test),
+            "prediction_minutes": (
+                sorted(int(value) for value in frame["issue_minutes"].unique())
+                if "issue_minutes" in frame.columns
+                else []
+            ),
         },
         "label": label_config or {"status": "not_supplied"},
     }
@@ -440,7 +468,12 @@ def predict_loaded(
     payload: dict[str, Any], pipeline: Pipeline, frame: pd.DataFrame
 ) -> tuple[np.ndarray, np.ndarray, list[list[tuple[str, float]]]]:
     feature_names = list(payload["feature_names"])
-    if payload["role"] in {"variant", "spatial", "nwp"}:
+    if payload["role"] in {
+        "variant",
+        "spatial",
+        "nwp",
+        "same_day",
+    }:
         guard_columns = {
             "piou_observation_count_morning",
             "piou_last_age_minutes",

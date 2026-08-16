@@ -630,10 +630,17 @@ def subset_before_cutoff(
 
 
 def piou_features(
-    local_day: date, observations: Sequence[PiouObservation], config: LabelConfig
+    local_day: date,
+    observations: Sequence[PiouObservation],
+    config: LabelConfig,
+    cutoff_local: datetime | None = None,
 ) -> dict[str, float] | None:
     timezone_local = ZoneInfo(config.timezone_name)
-    cutoff = local_boundary(local_day, config.cutoff_hour, timezone_local)
+    cutoff = cutoff_local or local_boundary(
+        local_day, config.cutoff_hour, timezone_local
+    )
+    if cutoff.tzinfo is None or cutoff.astimezone(timezone_local).date() != local_day:
+        raise ValueError("PiouPiou feature cutoff must be timezone-aware and on local_day")
     morning_start = local_boundary(
         local_day, config.piou_morning_start_hour, timezone_local
     )
@@ -1190,7 +1197,11 @@ def load_station_weather(
 
 def write_dataset(rows: Sequence[dict[str, Any]], output: Path) -> list[str]:
     output.parent.mkdir(parents=True, exist_ok=True)
-    leading = ["date", "year", "label"]
+    leading = [
+        name
+        for name in ("date", "year", "issue_minutes", "label")
+        if any(name in row for row in rows)
+    ]
     remaining = sorted(set().union(*(row.keys() for row in rows)).difference(leading))
     fields = leading + remaining
     temporary = output.with_suffix(output.suffix + ".part")

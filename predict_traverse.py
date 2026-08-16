@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score one prepared noon feature row with a trained Traverse model."""
+"""Score one prepared or historical row with a trained Traverse model."""
 
 from __future__ import annotations
 
@@ -45,7 +45,10 @@ def validate_prepared_contract(
     if role not in {"variant", "spatial", "nwp"}:
         raise ValueError("invalid_model: prepared rows require a weather-based model")
     contract = payload.get("input_contract")
-    expected_schema_version = {"spatial": 3, "nwp": 4}.get(role, 2)
+    expected_schema_version = {
+        "spatial": 3,
+        "nwp": 4,
+    }.get(role, 2)
     if (
         not isinstance(contract, dict)
         or contract.get("schema_version") != expected_schema_version
@@ -166,16 +169,22 @@ def validate_prepared_contract(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--model", type=Path, default=Path("artifacts/traverse_model_variant.joblib")
+        "--model", type=Path, default=Path("artifacts/traverse_model_same_day.joblib")
+    )
+    parser.add_argument(
+        "--time",
+        help="HH:MM issue time for a same-day timestep dataset",
     )
     parser.add_argument(
         "--model-sha256",
         help="Trusted out-of-band SHA-256 to verify before joblib deserialization",
     )
-    parser.add_argument("--dataset", type=Path, default=Path("artifacts/traverse_daily.csv"))
+    parser.add_argument(
+        "--dataset", type=Path, default=Path("artifacts/traverse_timestep.csv")
+    )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--date", help="Select a prepared historical day from --dataset")
-    source.add_argument("--features", type=Path, help="CSV containing one prepared noon row")
+    source.add_argument("--features", type=Path, help="CSV containing one prepared row")
     args = parser.parse_args()
 
     if args.features:
@@ -190,7 +199,10 @@ def main() -> int:
             loaded_artifact = load_artifact_with_sha256(
                 args.model, expected_model_sha256
             )
-            validate_prepared_contract(args.model, row, loaded_artifact)
+            if loaded_artifact[0].get("role") != "same_day":
+                validate_prepared_contract(args.model, row, loaded_artifact)
+            elif "issue_minutes" not in row:
+                raise ValueError("same-day features require issue_minutes")
         except (ValueError, KeyError) as error:
             print(json.dumps({"date": prediction_date, "status": str(error)}, indent=2))
             return 2
@@ -207,6 +219,18 @@ def main() -> int:
             raise SystemExit("Historical dataset SHA-256 does not match the model artifact")
         frame = pd.read_csv(args.dataset)
         row = frame[frame["date"].astype(str) == args.date]
+        if "issue_minutes" in row.columns:
+            if args.time is None:
+                raise SystemExit("--time is required for a same-day timestep dataset")
+            try:
+                parsed_time = datetime.strptime(args.time, "%H:%M")
+            except ValueError as error:
+                raise SystemExit("--time must use HH:MM") from error
+            requested_minutes = parsed_time.hour * 60 + parsed_time.minute
+            row = row[
+                pd.to_numeric(row["issue_minutes"], errors="coerce")
+                == requested_minutes
+            ]
         if len(row) != 1:
             raise SystemExit(f"Expected exactly one prepared row for {args.date}, found {len(row)}")
         prediction_date = args.date
@@ -221,6 +245,12 @@ def main() -> int:
         json.dumps(
             {
                 "date": prediction_date,
+                "issue_time": (
+                    f"{int(row.iloc[0]['issue_minutes']) // 60:02d}:"
+                    f"{int(row.iloc[0]['issue_minutes']) % 60:02d}"
+                    if "issue_minutes" in row.columns
+                    else None
+                ),
                 "status": "ok",
                 "traverse_probability": float(probability[0]),
                 "predict_traverse": bool(predicted[0]),

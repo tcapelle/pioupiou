@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train a noon Traverse logistic classifier for one feature role."""
+"""Train a Traverse logistic classifier for one feature role."""
 
 from __future__ import annotations
 
@@ -43,8 +43,10 @@ from traverse_model import (
 
 PROVENANCE_FILES = (
     "build_traverse_dataset.py",
+    "build_timestep_traverse_dataset.py",
     "open_meteo_features.py",
     "prepare_noon_features.py",
+    "prepare_timestep_features.py",
     "traverse_model.py",
     "train_traverse_model.py",
     "predict_traverse.py",
@@ -53,6 +55,7 @@ PROVENANCE_FILES = (
     "pyproject.toml",
     "uv.lock",
     "tests/test_build_traverse_dataset.py",
+    "tests/test_timestep_traverse.py",
     "tests/test_open_meteo_features.py",
     "tests/test_traverse_model.py",
 )
@@ -83,14 +86,18 @@ def runtime_provenance() -> tuple[dict[str, object], list[str]]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", type=Path, default=Path("artifacts/traverse_daily.csv"))
+    parser.add_argument(
+        "--dataset", type=Path, default=Path("artifacts/traverse_timestep.csv")
+    )
     parser.add_argument(
         "--metadata",
         type=Path,
         help="Dataset metadata JSON (default: DATASET with .metadata.json suffix)",
     )
     parser.add_argument(
-        "--role", choices=("baseline", "variant", "spatial", "nwp"), required=True
+        "--role",
+        choices=("baseline", "variant", "spatial", "nwp", "same_day"),
+        default="same_day",
     )
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument(
@@ -159,24 +166,37 @@ def main() -> int:
         or open_meteo_metadata.get("variables") != list(OPEN_METEO_VARIABLES)
     ):
         raise SystemExit("NWP training requires the configured ECMWF/Open-Meteo dataset")
+    if args.role == "same_day":
+        if "issue_minutes" not in frame.columns:
+            raise SystemExit("Same-day training requires an issue_minutes column")
+    l2_candidates = (1.0, 10.0) if args.role == "same_day" else (0.01, 0.1, 1.0, 10.0)
     bundle, metrics = train_and_evaluate(
         frame,
         args.role,
+        l2_candidates=l2_candidates,
         smoke=args.smoke,
         label_config=dataset_metadata["label_config"],
     )
     artifact = bundle["metadata"]
-    contract_schema_version = {"spatial": 3, "nwp": 4}.get(args.role, 2)
-    artifact["input_contract"] = {
-        "schema_version": contract_schema_version,
-        "dataset_sha256": dataset_sha256,
-        "label_config_sha256": sha256_json(dataset_metadata["label_config"]),
-        "feature_schema_sha256": sha256_json(artifact["feature_names"]),
-        "piou_station_id": str(piou_station_id),
-        "piou_source_schema": PIOU_SOURCE_SCHEMA,
-        "weather_station_id": str(weather_station_id),
-        "weather_source_schema": METEO_FRANCE_SOURCE_SCHEMA,
-    }
+    contract_schema_version = {
+        "spatial": 3,
+        "nwp": 4,
+    }.get(args.role, 2)
+    if args.role == "same_day":
+        artifact["input_contract"] = {
+            "prediction_window_minutes": dataset_metadata["prediction_window_minutes"]
+        }
+    else:
+        artifact["input_contract"] = {
+            "schema_version": contract_schema_version,
+            "dataset_sha256": dataset_sha256,
+            "label_config_sha256": sha256_json(dataset_metadata["label_config"]),
+            "feature_schema_sha256": sha256_json(artifact["feature_names"]),
+            "piou_station_id": str(piou_station_id),
+            "piou_source_schema": PIOU_SOURCE_SCHEMA,
+            "weather_station_id": str(weather_station_id),
+            "weather_source_schema": METEO_FRANCE_SOURCE_SCHEMA,
+        }
     if args.role == "spatial":
         artifact["input_contract"].update(
             {
@@ -262,7 +282,7 @@ def main() -> int:
     if mode != "disabled":
         import wandb
 
-        configured_l2_candidates = [1.0] if args.smoke else [0.01, 0.1, 1.0, 10.0]
+        configured_l2_candidates = [1.0] if args.smoke else list(l2_candidates)
         configured_c_candidates = [1.0 / value for value in configured_l2_candidates]
         selection_years = [2018, 2019] if args.smoke else [2020, 2021, 2022]
         run = wandb.init(

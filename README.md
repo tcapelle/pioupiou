@@ -1,6 +1,7 @@
-# Noon Traverse predictor
+# Traverse predictor
 
-This repository now contains a reproducible research model that answers:
+This repository contains reproducible research models for several related
+questions. The original daily model asks:
 
 > At 12:00 local time in Aix-les-Bains, will a sustained westerly wind above
 > 10 knots occur before 20:00?
@@ -11,6 +12,21 @@ warning service. The model is deliberately simple: a scikit-learn
 information timestamped before noon. The default uses PiouPiou and official
 station observations; an opt-in candidate also uses pre-noon ECMWF model
 fields from Open-Meteo.
+
+## Same-day probability at arbitrary times
+
+The new `same_day` role answers a time-independent question: given everything
+observed so far, what is the probability that a qualifying Traverse occurs at
+some point during today's fixed `[12:00, 20:00)` window? It trains on a dense
+30-minute grid from 06:30 through 19:30, uses smooth clock features, and can
+prepare and score any minute inside that window—for example 13:17. Inputs
+stamped at or after the requested time are always excluded.
+
+Held-out average precision rises naturally as evidence accumulates: 0.3232 at
+06:30, 0.4434 at noon, 0.5526 at 14:00, 0.6937 at 16:00, 0.8450 at 18:00, and
+0.9909 at 19:30. Late scores include direct evidence that the event already
+occurred and should be interpreted as same-day nowcasting, not advance forecast
+skill. See the [timestep experiment record](experiments/20260816-same-day-timesteps/plan.md).
 
 ## Current experiment
 
@@ -169,6 +185,7 @@ Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
 ```bash
 uv sync
 uv run python build_traverse_dataset.py
+uv run python build_timestep_traverse_dataset.py --offline
 
 uv run python train_traverse_model.py \
   --dataset artifacts/traverse_daily.csv \
@@ -188,6 +205,12 @@ uv run python train_traverse_model.py \
   --wandb-name exp-20260816-quartz-nwp \
   --wandb-tags exp/20260816-quartz-nwp,candidate
 
+uv run python train_traverse_model.py \
+  --dataset artifacts/traverse_timestep.csv \
+  --role same_day \
+  --wandb-name exp-20260816-same-day-timesteps \
+  --wandb-tags exp/20260816-same-day-timesteps,candidate
+
 uv run python compare_traverse_models.py \
   --reference artifacts/traverse_model_variant.joblib \
   --candidate artifacts/traverse_model_spatial.joblib
@@ -202,16 +225,25 @@ uv run python -m unittest discover -v
 If `WANDB_API_KEY` is absent, training records an offline run. Pass
 `--wandb-mode disabled` to skip tracking intentionally.
 
-Score an already prepared historical noon row:
+Score a historical row from the dense dataset:
 
 ```bash
-uv run python predict_traverse.py --date 2025-07-21
+uv run python predict_traverse.py --date 2025-07-21 --time 12:00
 ```
 
-Prepare an unlabeled row exactly as it exists at noon, then score it:
+Prepare an unlabeled row at any minute, then score it:
 
 ```bash
-# Reproducible historical example using the checked local archives.
+# Prepare and score a same-day probability at any minute in the model window.
+uv run python prepare_timestep_features.py \
+  --date 2025-07-21 --time 13:17 \
+  --offline-weather \
+  --output artifacts/timestep_features_2025-07-21_1317.csv
+uv run python predict_traverse.py \
+  --model artifacts/traverse_model_same_day.joblib \
+  --features artifacts/timestep_features_2025-07-21_1317.csv
+
+# The older noon-only roles still use their original preparer.
 uv run python prepare_noon_features.py \
   --date 2025-07-21 \
   --model artifacts/traverse_model_nwp.joblib \
@@ -242,11 +274,14 @@ against one immutable byte snapshot before deserialization and scoring.
 ## Files
 
 - `build_traverse_dataset.py`: enrichment, label, and daily feature builder.
+- `build_timestep_traverse_dataset.py`: dense same-day rows, continuous clock
+  features, and event-progress summaries.
 - `open_meteo_features.py`: verified ECMWF/Open-Meteo caching and leakage-safe
   pre-noon feature aggregation.
 - `grab_webcam_images.py`: standalone webcam archive inventory, exact
   selection planning, and resumable image download commands.
 - `prepare_noon_features.py`: unlabeled as-of-noon row preparation.
+- `prepare_timestep_features.py`: arbitrary-minute same-day feature preparation.
 - `traverse_model.py`: scikit-learn preprocessing, logistic fit, metrics, and
   `joblib` serialization.
 - `train_traverse_model.py`: chronological training/evaluation and W&B logging.
@@ -258,6 +293,8 @@ against one immutable byte snapshot before deserialization and scoring.
   ablation, W&B runs, metrics, and promotion decision.
 - `experiments/20260816-quartz-nwp/plan.md`: Quartz-inspired NWP methodology,
   evaluation, and non-promotion decision.
+- `experiments/20260816-same-day-timesteps/plan.md`: dense-timestep same-day
+  probability model and full-day score curve.
 - `tests/`: unit tests for time boundaries, label persistence, weather units,
   preprocessing, model persistence, feed contracts, and metrics.
 
