@@ -67,8 +67,8 @@ Dataset SHA-256:
 The paired average-precision difference (`nwp - variant`) is -0.0079949. The
 bootstrap 95% interval is [-0.0451590, +0.0328389], with median -0.0074094.
 
-The candidate had complete pre-noon NWP core fields for 3,018 of the 3,149
-usable rows; missingness is concentrated before the modeling window (2016).
+The candidate had complete pre-noon NWP core fields for 3,005 of the 3,149
+usable rows; the 144 missing rows are all before the modeling window (2016).
 The trained candidate uses 110 input columns versus 65 for the reference.
 
 ## Decision

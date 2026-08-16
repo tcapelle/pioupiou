@@ -1367,6 +1367,10 @@ def main() -> int:
             "fraction": available / len(rows),
             "by_year": by_year,
         }
+    open_meteo_available_days = sum(
+        int(row.get("nwp_core_observation_count_morning", 0.0) > 0)
+        for row in rows
+    )
     metadata = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "output": str(args.output),
@@ -1431,15 +1435,9 @@ def main() -> int:
                 "window; afternoon model values are excluded"
             ),
             "cache": open_meteo_provenance,
-            "available_days": sum(
-                int(
-                    open_meteo_days.get(local_day, {}).get(
-                        "nwp_core_observation_count_morning", 0.0
-                    )
-                    > 0
-                )
-                for local_day in piou_days
-            ),
+            "available_days": open_meteo_available_days,
+            "total_days": len(rows),
+            "fraction": open_meteo_available_days / len(rows),
         },
     }
     args.metadata_output.parent.mkdir(parents=True, exist_ok=True)
