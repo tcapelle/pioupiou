@@ -33,6 +33,47 @@ The full design, run IDs, metrics, and decision are in the
 This is a retrospective ablation on an already inspected test period, not an
 unbiased estimate of performance on future seasons.
 
+## Webcam image dataset
+
+The Grand Port panoramic webcam is a promising spatial source for the next
+Traverse experiment. Its public player exposes a timestamped archive from
+September 2018 at a roughly 20-30-minute cadence. The metadata audit found all
+five candidate pre-noon frames for 2,317 of 2,381 archive-overlapping label
+days (97.31%), including 588 of 592 dates in the 2024-2025 test period.
+
+`grab_webcam_images.py` is a standalone, standard-library-only collector. It
+keeps discovery, selection, and transfer separate so that no images need to be
+downloaded before the exact dataset has been reviewed.
+
+Inventory a period without downloading images:
+
+```bash
+uv run python grab_webcam_images.py inventory \
+  --start-date 2024-01-01 --end-date 2025-08-15
+```
+
+Create an exact, editable selection. The time window is half-open and
+`--stride 2` keeps every second capture within each day:
+
+```bash
+uv run python grab_webcam_images.py plan \
+  --start-date 2024-01-01 --end-date 2025-08-15 \
+  --from-time 08:00 --until-time 12:00 \
+  --stride 2 --quality mini
+```
+
+Inspect or edit `artifacts/webcam_grandport/selection.csv`. After confirming
+bulk collection and machine-learning rights with the image rightsholders,
+download exactly those frozen rows:
+
+```bash
+uv run python grab_webcam_images.py download
+```
+
+Monthly API responses are cached as JSON and existing image files are skipped
+when a download is restarted. Generated metadata and images stay under
+`artifacts/webcam_grandport/` and are ignored by Git.
+
 ## What counts as a Traverse
 
 The default label is positive when all of the following hold:
@@ -165,6 +206,8 @@ against one immutable byte snapshot before deserialization and scoring.
 ## Files
 
 - `build_traverse_dataset.py`: enrichment, label, and daily feature builder.
+- `grab_webcam_images.py`: standalone webcam archive inventory, exact
+  selection planning, and resumable image download commands.
 - `prepare_noon_features.py`: unlabeled as-of-noon row preparation.
 - `traverse_model.py`: scikit-learn preprocessing, logistic fit, metrics, and
   `joblib` serialization.
@@ -193,6 +236,10 @@ by git. They remain in `artifacts/`, `pioudata/.weather_cache/`, and `wandb/`.
   and are published under Licence Ouverte 2.0.
 - The official Météo-France field and unit dictionary is
   <https://meteofrance.s3.sbg.io.cloud.ovh.net/data/synchro_ftp/BASE/HOR/H_descriptif_champs.csv>.
+- Grand Port webcam inventories and selections preserve media IDs, timestamps,
+  and source URLs. Public archive/download availability is not treated as a
+  reusable dataset licence; confirm bulk collection and ML rights with Skaping
+  and/or Grand Lac before downloading the full archive.
 
 ## Important limitation for live use
 
