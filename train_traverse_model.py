@@ -145,30 +145,36 @@ def main() -> int:
         label_config_from_payload(dataset_metadata.get("label_config"))
     except ValueError as error:
         raise SystemExit(f"Invalid dataset label contract: {error}") from error
-    piou_station_id = dataset_metadata.get("pioupiou", {}).get("station_id")
-    weather_station_id = dataset_metadata.get("meteofrance", {}).get("station_id")
-    if piou_station_id is None or weather_station_id is None:
-        raise SystemExit("Dataset metadata must identify both source stations")
-    if dataset_metadata["pioupiou"].get("source_schema") != PIOU_SOURCE_SCHEMA or (
-        dataset_metadata["meteofrance"].get("source_schema")
-        != METEO_FRANCE_SOURCE_SCHEMA
-    ):
-        raise SystemExit("Dataset metadata has an unsupported source schema")
-    station_manifest = dataset_metadata.get("meteofrance", {}).get("station_manifest")
-    expected_station_manifest = [asdict(station) for station in WEATHER_STATIONS]
-    if args.role == "spatial" and station_manifest != expected_station_manifest:
-        raise SystemExit("Spatial training requires the configured weather station manifest")
-    open_meteo_metadata = dataset_metadata.get("open_meteo", {})
-    if args.role == "nwp" and (
-        not open_meteo_metadata.get("enabled")
-        or open_meteo_metadata.get("source_schema") != OPEN_METEO_SOURCE_SCHEMA
-        or open_meteo_metadata.get("model") != OPEN_METEO_MODEL
-        or open_meteo_metadata.get("variables") != list(OPEN_METEO_VARIABLES)
-    ):
-        raise SystemExit("NWP training requires the configured ECMWF/Open-Meteo dataset")
     if args.role == "same_day":
         if "issue_minutes" not in frame.columns:
             raise SystemExit("Same-day training requires an issue_minutes column")
+    else:
+        piou = dataset_metadata["pioupiou"]
+        weather = dataset_metadata["meteofrance"]
+        piou_station_id = piou["station_id"]
+        weather_station_id = weather["station_id"]
+        if (
+            piou["source_schema"] != PIOU_SOURCE_SCHEMA
+            or weather["source_schema"] != METEO_FRANCE_SOURCE_SCHEMA
+        ):
+            raise SystemExit("Dataset metadata has an unsupported source schema")
+        station_manifest = weather.get("station_manifest")
+        if args.role == "spatial" and station_manifest != [
+            asdict(station) for station in WEATHER_STATIONS
+        ]:
+            raise SystemExit(
+                "Spatial training requires the configured weather station manifest"
+            )
+        open_meteo_metadata = dataset_metadata.get("open_meteo", {})
+        if args.role == "nwp" and (
+            not open_meteo_metadata.get("enabled")
+            or open_meteo_metadata.get("source_schema") != OPEN_METEO_SOURCE_SCHEMA
+            or open_meteo_metadata.get("model") != OPEN_METEO_MODEL
+            or open_meteo_metadata.get("variables") != list(OPEN_METEO_VARIABLES)
+        ):
+            raise SystemExit(
+                "NWP training requires the configured ECMWF/Open-Meteo dataset"
+            )
     l2_candidates = (1.0, 10.0) if args.role == "same_day" else (0.01, 0.1, 1.0, 10.0)
     bundle, metrics = train_and_evaluate(
         frame,
@@ -178,17 +184,9 @@ def main() -> int:
         label_config=dataset_metadata["label_config"],
     )
     artifact = bundle["metadata"]
-    contract_schema_version = {
-        "spatial": 3,
-        "nwp": 4,
-    }.get(args.role, 2)
-    if args.role == "same_day":
+    if args.role != "same_day":
         artifact["input_contract"] = {
-            "prediction_window_minutes": dataset_metadata["prediction_window_minutes"]
-        }
-    else:
-        artifact["input_contract"] = {
-            "schema_version": contract_schema_version,
+            "schema_version": {"spatial": 3, "nwp": 4}.get(args.role, 2),
             "dataset_sha256": dataset_sha256,
             "label_config_sha256": sha256_json(dataset_metadata["label_config"]),
             "feature_schema_sha256": sha256_json(artifact["feature_names"]),
@@ -269,13 +267,18 @@ def main() -> int:
             "validation/selected_threshold": float(artifact["model"]["threshold"]),
         }
     )
-    for station, coverage in dataset_metadata["meteofrance"].get(
-        "station_temperature_coverage", {}
-    ).items():
-        flat[f"data/{station}_temperature_coverage"] = float(coverage["fraction"])
-    flat["data/piou_invalid_location_rows"] = float(
-        dataset_metadata["pioupiou"]["counters"].get("invalid_location_rows", 0)
-    )
+    if args.role != "same_day":
+        for station, coverage in dataset_metadata["meteofrance"].get(
+            "station_temperature_coverage", {}
+        ).items():
+            flat[f"data/{station}_temperature_coverage"] = float(
+                coverage["fraction"]
+            )
+        flat["data/piou_invalid_location_rows"] = float(
+            dataset_metadata["pioupiou"]["counters"].get(
+                "invalid_location_rows", 0
+            )
+        )
     mode = args.wandb_mode
     if mode == "auto":
         mode = "online" if os.environ.get("WANDB_API_KEY") else "offline"

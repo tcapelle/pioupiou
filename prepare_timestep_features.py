@@ -11,6 +11,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from build_timestep_traverse_dataset import (
+    DEFAULT_END_MINUTES,
+    DEFAULT_START_MINUTES,
     build_primary_weather_timeline,
     cutoff_for_minutes,
     historical_traverse_features,
@@ -78,16 +80,12 @@ def main() -> int:
         config = label_config_from_payload(payload.get("label"))
     except ValueError as error:
         raise SystemExit(f"Model has an invalid label contract: {error}") from error
-    contract = payload.get("input_contract")
-    if not isinstance(contract, dict):
-        raise SystemExit("Model is missing prediction metadata")
-
     local_day = date.fromisoformat(args.date)
     issue_minutes = int(args.time)
-    window = contract["prediction_window_minutes"]
-    if not int(window[0]) <= issue_minutes < int(window[1]):
+    if not DEFAULT_START_MINUTES <= issue_minutes < DEFAULT_END_MINUTES:
         raise SystemExit(
-            f"Requested time is outside [{window[0]}, {window[1]}) minutes"
+            f"Requested time is outside [{DEFAULT_START_MINUTES}, "
+            f"{DEFAULT_END_MINUTES}) minutes"
         )
     timezone_local = ZoneInfo(config.timezone_name)
     cutoff = cutoff_for_minutes(local_day, issue_minutes, timezone_local)
@@ -104,7 +102,7 @@ def main() -> int:
     )
     if piou is None:
         raise SystemExit("insufficient_data: missing or stale PiouPiou observations")
-    weather, _, _, _ = build_primary_weather_timeline(
+    weather = build_primary_weather_timeline(
         args.cache_dir,
         config,
         local_day.year,
