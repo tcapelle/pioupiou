@@ -29,6 +29,15 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
+from open_meteo_features import (
+    OPEN_METEO_LATITUDE,
+    OPEN_METEO_LONGITUDE,
+    OPEN_METEO_MODEL,
+    OPEN_METEO_SOURCE_SCHEMA,
+    OPEN_METEO_VARIABLES,
+    load_open_meteo_years,
+)
+
 
 DATA_GOUV_DATASET_ID = "6569b4473bedf2e7abad3b72"
 DATA_GOUV_API = f"https://www.data.gouv.fr/api/1/datasets/{DATA_GOUV_DATASET_ID}/"
@@ -1236,6 +1245,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--weather-morning-start-hour", type=int, default=6)
     parser.add_argument("--maximum-weather-feature-age-minutes", type=float, default=90.0)
     parser.add_argument("--refresh-weather", action="store_true")
+    parser.add_argument("--refresh-open-meteo", action="store_true")
+    parser.add_argument(
+        "--skip-open-meteo",
+        action="store_true",
+        help="Build the legacy dataset without ECMWF/Open-Meteo feature columns",
+    )
     parser.add_argument("--offline", action="store_true")
     return parser
 
@@ -1276,6 +1291,22 @@ def main() -> int:
         args.refresh_weather,
         args.offline,
     )
+    open_meteo_days: dict[date, dict[str, float]] = {}
+    open_meteo_provenance: list[dict[str, str]] = []
+    if not args.skip_open_meteo:
+        try:
+            open_meteo_days, open_meteo_provenance = load_open_meteo_years(
+                args.cache_dir,
+                start_year,
+                end_year,
+                config.timezone_name,
+                config.weather_morning_start_hour,
+                config.cutoff_hour,
+                refresh=args.refresh_open_meteo,
+                offline=args.offline,
+            )
+        except (FileNotFoundError, ValueError) as error:
+            raise SystemExit(str(error)) from error
     rows: list[dict[str, Any]] = []
     days_without_weather = 0
     days_with_stale_weather = 0
@@ -1307,6 +1338,7 @@ def main() -> int:
             {
                 **row,
                 **airport,
+                **open_meteo_days.get(local_day, {}),
                 **spatial_weather_features(
                     optional_weather,
                     config.maximum_weather_feature_age_minutes,
@@ -1386,6 +1418,27 @@ def main() -> int:
             "feature_window": (
                 f"[{config.weather_morning_start_hour:02d}:00,"
                 f"{config.cutoff_hour:02d}:00) Europe/Paris"
+            ),
+        },
+        "open_meteo": {
+            "enabled": not args.skip_open_meteo,
+            "source_schema": OPEN_METEO_SOURCE_SCHEMA,
+            "model": OPEN_METEO_MODEL,
+            "requested_coordinates": [OPEN_METEO_LATITUDE, OPEN_METEO_LONGITUDE],
+            "variables": list(OPEN_METEO_VARIABLES),
+            "feature_policy": (
+                "hourly model values with local valid times in the configured morning "
+                "window; afternoon model values are excluded"
+            ),
+            "cache": open_meteo_provenance,
+            "available_days": sum(
+                int(
+                    open_meteo_days.get(local_day, {}).get(
+                        "nwp_core_observation_count_morning", 0.0
+                    )
+                    > 0
+                )
+                for local_day in piou_days
             ),
         },
     }

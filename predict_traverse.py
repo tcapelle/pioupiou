@@ -17,6 +17,13 @@ from build_traverse_dataset import (
     label_config_from_payload,
     local_boundary,
 )
+from open_meteo_features import (
+    OPEN_METEO_LATITUDE,
+    OPEN_METEO_LONGITUDE,
+    OPEN_METEO_MODEL,
+    OPEN_METEO_SOURCE_SCHEMA,
+    OPEN_METEO_VARIABLES,
+)
 from traverse_model import (
     load_artifact_with_sha256,
     predict_loaded,
@@ -35,10 +42,10 @@ def validate_prepared_contract(
     )
     row = pd_row
     role = payload.get("role")
-    if role not in {"variant", "spatial"}:
+    if role not in {"variant", "spatial", "nwp"}:
         raise ValueError("invalid_model: prepared rows require a weather-based model")
     contract = payload.get("input_contract")
-    expected_schema_version = 3 if role == "spatial" else 2
+    expected_schema_version = {"spatial": 3, "nwp": 4}.get(role, 2)
     if (
         not isinstance(contract, dict)
         or contract.get("schema_version") != expected_schema_version
@@ -65,6 +72,10 @@ def validate_prepared_contract(
     }
     if role == "spatial":
         required.add("meta_weather_station_manifest_sha256")
+    if role == "nwp":
+        required.update(
+            {"meta_open_meteo_source_schema", "meta_open_meteo_model"}
+        )
     missing = sorted(required.difference(row.columns))
     if missing:
         raise ValueError(f"incompatible_features: missing contract columns {missing}")
@@ -72,7 +83,7 @@ def validate_prepared_contract(
     supplied_features = {
         name
         for name in row.columns
-        if name.startswith(("cal_", "piou_", "mf_", "mfs_"))
+        if name.startswith(("cal_", "piou_", "mf_", "mfs_", "nwp_"))
     }
     if supplied_features != expected_features:
         missing_features = sorted(expected_features - supplied_features)
@@ -101,6 +112,23 @@ def validate_prepared_contract(
         if station_manifest_sha256 != sha256_json(station_manifest):
             raise ValueError("invalid_model: weather station manifest fingerprint mismatch")
         expected["meta_weather_station_manifest_sha256"] = station_manifest_sha256
+    if role == "nwp":
+        if (
+            contract.get("open_meteo_source_schema") != OPEN_METEO_SOURCE_SCHEMA
+            or contract.get("open_meteo_model") != OPEN_METEO_MODEL
+            or contract.get("open_meteo_coordinates")
+            != [OPEN_METEO_LATITUDE, OPEN_METEO_LONGITUDE]
+            or contract.get("open_meteo_variables") != list(OPEN_METEO_VARIABLES)
+        ):
+            raise ValueError("invalid_model: unsupported ECMWF/Open-Meteo contract")
+        expected.update(
+            {
+                "meta_open_meteo_source_schema": contract[
+                    "open_meteo_source_schema"
+                ],
+                "meta_open_meteo_model": contract["open_meteo_model"],
+            }
+        )
     mismatches = [
         name for name, expected_value in expected.items() if value(name) != expected_value
     ]

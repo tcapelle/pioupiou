@@ -8,9 +8,30 @@ This repository now contains a reproducible research model that answers:
 It is a leakage-free, backtested prototype rather than a production weather
 warning service. The model is deliberately simple: a scikit-learn
 `ColumnTransformer` and L2-regularized `LogisticRegression`, using only
-PiouPiou and weather observations timestamped before noon.
+information timestamped before noon. The default uses PiouPiou and official
+station observations; an opt-in candidate also uses pre-noon ECMWF model
+fields from Open-Meteo.
 
 ## Current experiment
+
+The Quartz-inspired NWP enrichment is implemented and evaluated without
+changing the estimator. A new `nwp` role adds 45 daily features derived from
+15 ECMWF IFS variables: temperature, humidity, dew point, precipitation,
+surface and sea-level pressure, total/low/mid/high cloud cover, wind speed and
+direction, daylight state, and direct/diffuse radiation. Values are summarized
+only over `[06:00, 12:00)` local time; reconstructed afternoon weather is
+deliberately excluded because it would leak information unavailable at the
+noon decision.
+
+On the unchanged 592-day 2024–2025 test slice, the NWP candidate reached
+0.4168 average precision versus 0.4248 for `variant` (difference -0.0080;
+paired bootstrap 95% interval [-0.0452, +0.0328]). Recall increased from
+0.6752 to 0.7094, but precision fell from 0.3692 to 0.3086 and balanced
+accuracy fell from 0.6955 to 0.6589. It is therefore retained as a research
+role and is not promoted over the default. See the
+[experiment record](experiments/20260816-quartz-nwp/plan.md).
+
+## Previous spatial-station experiment
 
 PP456 stopped reporting valid lake coordinates on 16 August 2025, but its
 archive later resumed with null coordinates. The builder now rejects every
@@ -68,7 +89,9 @@ leakage-free row per usable local day. It:
 5. streams each large Météo-France archive once and caches only the five chosen
    stations; and
 6. adds the existing airport weather block plus compact ridge, west, north, and
-   south observations through 11:00 local.
+   south observations through 11:00 local; and
+7. caches yearly ECMWF IFS responses from Open-Meteo and creates the optional
+   Quartz-inspired pre-noon `nwp_` block.
 
 The station manifest is deliberately short:
 
@@ -118,9 +141,20 @@ uv run python train_traverse_model.py \
   --wandb-name exp-20260807-spatial-stations-spatial \
   --wandb-tags exp/20260807-spatial-stations,spatial
 
+uv run python train_traverse_model.py \
+  --dataset artifacts/traverse_daily.csv \
+  --role nwp \
+  --wandb-name exp-20260816-quartz-nwp \
+  --wandb-tags exp/20260816-quartz-nwp,candidate
+
 uv run python compare_traverse_models.py \
   --reference artifacts/traverse_model_variant.joblib \
   --candidate artifacts/traverse_model_spatial.joblib
+uv run python compare_traverse_models.py \
+  --reference artifacts/traverse_model_variant.joblib \
+  --candidate artifacts/traverse_model_nwp.joblib \
+  --output artifacts/traverse_comparison_nwp.json \
+  --replicates 5000
 uv run python -m unittest discover -v
 ```
 
@@ -139,10 +173,12 @@ Prepare an unlabeled row exactly as it exists at noon, then score it:
 # Reproducible historical example using the checked local archives.
 uv run python prepare_noon_features.py \
   --date 2025-07-21 \
+  --model artifacts/traverse_model_nwp.joblib \
   --piou-input-dir pioudata \
   --offline-weather \
   --output artifacts/noon_features_2025-07-21.csv
 uv run python predict_traverse.py \
+  --model artifacts/traverse_model_nwp.joblib \
   --features artifacts/noon_features_2025-07-21.csv
 ```
 
@@ -165,6 +201,8 @@ against one immutable byte snapshot before deserialization and scoring.
 ## Files
 
 - `build_traverse_dataset.py`: enrichment, label, and daily feature builder.
+- `open_meteo_features.py`: verified ECMWF/Open-Meteo caching and leakage-safe
+  pre-noon feature aggregation.
 - `prepare_noon_features.py`: unlabeled as-of-noon row preparation.
 - `traverse_model.py`: scikit-learn preprocessing, logistic fit, metrics, and
   `joblib` serialization.
@@ -175,6 +213,8 @@ against one immutable byte snapshot before deserialization and scoring.
   and review record.
 - `experiments/20260807-spatial-stations/plan.md`: corrected multi-station
   ablation, W&B runs, metrics, and promotion decision.
+- `experiments/20260816-quartz-nwp/plan.md`: Quartz-inspired NWP methodology,
+  evaluation, and non-promotion decision.
 - `tests/`: unit tests for time boundaries, label persistence, weather units,
   preprocessing, model persistence, feed contracts, and metrics.
 
@@ -193,6 +233,10 @@ by git. They remain in `artifacts/`, `pioudata/.weather_cache/`, and `wandb/`.
   and are published under Licence Ouverte 2.0.
 - The official Météo-France field and unit dictionary is
   <https://meteofrance.s3.sbg.io.cloud.ovh.net/data/synchro_ftp/BASE/HOR/H_descriptif_champs.csv>.
+- The NWP candidate follows the variable methodology in
+  <https://github.com/openclimatefix/open-source-quartz-solar-forecast> and
+  uses Open-Meteo's documented historical forecast archive:
+  <https://open-meteo.com/en/docs/historical-forecast-api>.
 
 ## Important limitation for live use
 

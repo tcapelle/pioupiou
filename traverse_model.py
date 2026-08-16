@@ -44,6 +44,7 @@ FEATURE_PREFIXES = {
     "baseline": ("cal_",),
     "variant": ("cal_", "piou_", "mf_"),
     "spatial": ("cal_", "piou_", "mf_", "mfs_"),
+    "nwp": ("cal_", "piou_", "mf_", "nwp_"),
 }
 RANDOM_STATE = 20260807
 
@@ -439,20 +440,24 @@ def predict_loaded(
     payload: dict[str, Any], pipeline: Pipeline, frame: pd.DataFrame
 ) -> tuple[np.ndarray, np.ndarray, list[list[tuple[str, float]]]]:
     feature_names = list(payload["feature_names"])
-    if payload["role"] in {"variant", "spatial"}:
+    if payload["role"] in {"variant", "spatial", "nwp"}:
         guard_columns = {
             "piou_observation_count_morning",
             "piou_last_age_minutes",
             "mf_core_observation_count_morning",
             "mf_last_age_minutes",
         }
+        if payload["role"] == "nwp":
+            guard_columns.update(
+                {"nwp_core_observation_count_morning", "nwp_last_age_minutes"}
+            )
         artifact_missing = sorted(guard_columns.difference(feature_names))
         if artifact_missing:
             raise ValueError(f"invalid_model: missing feed guard features {artifact_missing}")
         row_missing = sorted(guard_columns.difference(frame.columns))
         if row_missing:
             raise ValueError(f"insufficient_data: missing required feed columns {row_missing}")
-        for prefix, count_name, age_name, maximum_age_key, default_maximum_age in (
+        feed_guards = [
             (
                 "piou_",
                 "piou_observation_count_morning",
@@ -467,7 +472,18 @@ def predict_loaded(
                 "maximum_weather_feature_age_minutes",
                 90.0,
             ),
-        ):
+        ]
+        if payload["role"] == "nwp":
+            feed_guards.append(
+                (
+                    "nwp_",
+                    "nwp_core_observation_count_morning",
+                    "nwp_last_age_minutes",
+                    "maximum_weather_feature_age_minutes",
+                    90.0,
+                )
+            )
+        for prefix, count_name, age_name, maximum_age_key, default_maximum_age in feed_guards:
             physical = [
                 name
                 for name in feature_names

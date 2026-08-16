@@ -8,7 +8,7 @@ import csv
 import json
 import math
 from dataclasses import asdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -26,6 +26,14 @@ from build_traverse_dataset import (
     piou_features,
     read_month,
     spatial_weather_features,
+)
+from open_meteo_features import (
+    OPEN_METEO_LATITUDE,
+    OPEN_METEO_LONGITUDE,
+    OPEN_METEO_MODEL,
+    OPEN_METEO_SOURCE_SCHEMA,
+    OPEN_METEO_VARIABLES,
+    load_open_meteo_days,
 )
 from traverse_model import load_artifact_with_sha256, sha256_json
 
@@ -95,19 +103,20 @@ def main() -> int:
         "--cache-dir", type=Path, default=Path("pioudata/.weather_cache")
     )
     parser.add_argument("--refresh-weather", action="store_true")
+    parser.add_argument("--refresh-open-meteo", action="store_true")
     parser.add_argument(
         "--offline-weather", action="store_true", help="Do not query data.gouv.fr"
     )
     args = parser.parse_args()
-    if args.refresh_weather and args.offline_weather:
-        raise SystemExit("--refresh-weather and --offline-weather are mutually exclusive")
+    if (args.refresh_weather or args.refresh_open_meteo) and args.offline_weather:
+        raise SystemExit("Refresh options and --offline-weather are mutually exclusive")
 
     try:
         model_payload, _, model_sha256 = load_artifact_with_sha256(args.model)
     except ValueError as error:
         raise SystemExit(str(error)) from error
     role = model_payload.get("role")
-    if role not in {"variant", "spatial"}:
+    if role not in {"variant", "spatial", "nwp"}:
         raise SystemExit("Noon preparation requires a weather-based model")
     try:
         config = label_config_from_payload(model_payload.get("label"))
@@ -124,9 +133,18 @@ def main() -> int:
         "weather_station_id",
         "weather_source_schema",
     }
+    if role == "nwp":
+        required_contract.update(
+            {
+                "open_meteo_source_schema",
+                "open_meteo_model",
+                "open_meteo_coordinates",
+                "open_meteo_variables",
+            }
+        )
     if not isinstance(contract, dict) or not required_contract.issubset(contract):
         raise SystemExit("Model is missing its input contract")
-    expected_schema_version = 3 if role == "spatial" else 2
+    expected_schema_version = {"spatial": 3, "nwp": 4}.get(role, 2)
     if contract["schema_version"] != expected_schema_version:
         raise SystemExit("Unsupported model input contract version")
     if contract["label_config_sha256"] != sha256_json(model_payload["label"]):
@@ -145,6 +163,14 @@ def main() -> int:
             "weather_station_manifest_sha256"
         ) != sha256_json(station_manifest):
             raise SystemExit("Model weather station manifest is not supported")
+    if role == "nwp" and (
+        contract.get("open_meteo_source_schema") != OPEN_METEO_SOURCE_SCHEMA
+        or contract.get("open_meteo_model") != OPEN_METEO_MODEL
+        or contract.get("open_meteo_coordinates")
+        != [OPEN_METEO_LATITUDE, OPEN_METEO_LONGITUDE]
+        or contract.get("open_meteo_variables") != list(OPEN_METEO_VARIABLES)
+    ):
+        raise SystemExit("Model ECMWF/Open-Meteo contract is not supported")
     piou_station_id = str(args.piou_station_id or contract["piou_station_id"])
     weather_station_id = str(
         args.weather_station_id or contract["weather_station_id"]
@@ -171,7 +197,6 @@ def main() -> int:
     if piou is None:
         raise SystemExit("insufficient_data: missing or stale pre-noon PiouPiou observations")
 
-    stations = WEATHER_STATIONS if role == "spatial" else (PRIMARY_WEATHER_STATION,)
     weather_days, _, _, _ = load_station_weather(
         args.cache_dir,
         config,
@@ -179,7 +204,10 @@ def main() -> int:
         local_day.year,
         args.refresh_weather,
         args.offline_weather,
-        stations=stations,
+        # The reproducible builder caches all configured stations together for
+        # each department resource. Reuse that exact verified cache even when
+        # this model only consumes the primary airport block.
+        stations=WEATHER_STATIONS,
     )
     airport = weather_days[PRIMARY_WEATHER_STATION.slug].get(local_day)
     if airport is None:
@@ -197,6 +225,46 @@ def main() -> int:
         **piou,
         **airport,
     }
+    nwp_age: float | None = None
+    if role == "nwp":
+        today = datetime.now(timezone_local).date()
+        live = local_day >= today - timedelta(days=5)
+        query_start = local_day
+        query_end = local_day
+        if not live and local_day.year < today.year:
+            query_start = date(local_day.year, 1, 1)
+            query_end = date(local_day.year, 12, 31)
+        try:
+            nwp_days, _ = load_open_meteo_days(
+                args.cache_dir,
+                query_start,
+                query_end,
+                config.timezone_name,
+                config.weather_morning_start_hour,
+                config.cutoff_hour,
+                refresh=args.refresh_open_meteo,
+                offline=args.offline_weather,
+                live=live,
+            )
+        except (FileNotFoundError, ValueError) as error:
+            raise SystemExit(str(error)) from error
+        nwp = nwp_days.get(local_day)
+        if nwp is None:
+            raise SystemExit("insufficient_data: no pre-noon ECMWF model fields")
+        nwp_age = float(nwp.get("nwp_last_age_minutes", float("nan")))
+        nwp_count = float(
+            nwp.get("nwp_core_observation_count_morning", float("nan"))
+        )
+        if (
+            not math.isfinite(nwp_age)
+            or nwp_age > config.maximum_weather_feature_age_minutes
+            or not math.isfinite(nwp_count)
+            or nwp_count <= 0
+        ):
+            raise SystemExit(
+                "insufficient_data: missing or stale pre-noon ECMWF model fields"
+            )
+        prepared.update(nwp)
     if role == "spatial":
         prepared.update(
             spatial_weather_features(
@@ -229,6 +297,15 @@ def main() -> int:
             "meta_weather_station_id": weather_station_id,
         }
     )
+    if role == "nwp":
+        row.update(
+            {
+                "meta_open_meteo_source_schema": contract[
+                    "open_meteo_source_schema"
+                ],
+                "meta_open_meteo_model": contract["open_meteo_model"],
+            }
+        )
     if role == "spatial":
         row["meta_weather_station_manifest_sha256"] = contract[
             "weather_station_manifest_sha256"
@@ -240,6 +317,7 @@ def main() -> int:
                 "date": local_day.isoformat(),
                 "feature_columns": len(row),
                 "mf_last_age_minutes": weather_age,
+                "nwp_last_age_minutes": nwp_age,
                 "output": str(args.output),
                 "piou_last_age_minutes": piou["piou_last_age_minutes"],
             },

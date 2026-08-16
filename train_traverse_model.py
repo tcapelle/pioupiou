@@ -24,6 +24,13 @@ from build_traverse_dataset import (
     WEATHER_STATIONS,
     label_config_from_payload,
 )
+from open_meteo_features import (
+    OPEN_METEO_LATITUDE,
+    OPEN_METEO_LONGITUDE,
+    OPEN_METEO_MODEL,
+    OPEN_METEO_SOURCE_SCHEMA,
+    OPEN_METEO_VARIABLES,
+)
 from traverse_model import (
     load_daily_dataset,
     save_model_bundle,
@@ -36,6 +43,7 @@ from traverse_model import (
 
 PROVENANCE_FILES = (
     "build_traverse_dataset.py",
+    "open_meteo_features.py",
     "prepare_noon_features.py",
     "traverse_model.py",
     "train_traverse_model.py",
@@ -45,6 +53,7 @@ PROVENANCE_FILES = (
     "pyproject.toml",
     "uv.lock",
     "tests/test_build_traverse_dataset.py",
+    "tests/test_open_meteo_features.py",
     "tests/test_traverse_model.py",
 )
 
@@ -81,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Dataset metadata JSON (default: DATASET with .metadata.json suffix)",
     )
     parser.add_argument(
-        "--role", choices=("baseline", "variant", "spatial"), required=True
+        "--role", choices=("baseline", "variant", "spatial", "nwp"), required=True
     )
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument(
@@ -142,6 +151,14 @@ def main() -> int:
     expected_station_manifest = [asdict(station) for station in WEATHER_STATIONS]
     if args.role == "spatial" and station_manifest != expected_station_manifest:
         raise SystemExit("Spatial training requires the configured weather station manifest")
+    open_meteo_metadata = dataset_metadata.get("open_meteo", {})
+    if args.role == "nwp" and (
+        not open_meteo_metadata.get("enabled")
+        or open_meteo_metadata.get("source_schema") != OPEN_METEO_SOURCE_SCHEMA
+        or open_meteo_metadata.get("model") != OPEN_METEO_MODEL
+        or open_meteo_metadata.get("variables") != list(OPEN_METEO_VARIABLES)
+    ):
+        raise SystemExit("NWP training requires the configured ECMWF/Open-Meteo dataset")
     bundle, metrics = train_and_evaluate(
         frame,
         args.role,
@@ -149,8 +166,9 @@ def main() -> int:
         label_config=dataset_metadata["label_config"],
     )
     artifact = bundle["metadata"]
+    contract_schema_version = {"spatial": 3, "nwp": 4}.get(args.role, 2)
     artifact["input_contract"] = {
-        "schema_version": 3 if args.role == "spatial" else 2,
+        "schema_version": contract_schema_version,
         "dataset_sha256": dataset_sha256,
         "label_config_sha256": sha256_json(dataset_metadata["label_config"]),
         "feature_schema_sha256": sha256_json(artifact["feature_names"]),
@@ -164,6 +182,18 @@ def main() -> int:
             {
                 "weather_station_manifest": station_manifest,
                 "weather_station_manifest_sha256": sha256_json(station_manifest),
+            }
+        )
+    if args.role == "nwp":
+        artifact["input_contract"].update(
+            {
+                "open_meteo_source_schema": OPEN_METEO_SOURCE_SCHEMA,
+                "open_meteo_model": OPEN_METEO_MODEL,
+                "open_meteo_coordinates": [
+                    OPEN_METEO_LATITUDE,
+                    OPEN_METEO_LONGITUDE,
+                ],
+                "open_meteo_variables": list(OPEN_METEO_VARIABLES),
             }
         )
     artifact["dataset"] = str(args.dataset)
