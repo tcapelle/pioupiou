@@ -29,6 +29,15 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
+from open_meteo_features import (
+    OPEN_METEO_LATITUDE,
+    OPEN_METEO_LONGITUDE,
+    OPEN_METEO_MODEL,
+    OPEN_METEO_SOURCE_SCHEMA,
+    OPEN_METEO_VARIABLES,
+    load_open_meteo_years,
+)
+
 
 DATA_GOUV_DATASET_ID = "6569b4473bedf2e7abad3b72"
 DATA_GOUV_API = f"https://www.data.gouv.fr/api/1/datasets/{DATA_GOUV_DATASET_ID}/"
@@ -621,10 +630,17 @@ def subset_before_cutoff(
 
 
 def piou_features(
-    local_day: date, observations: Sequence[PiouObservation], config: LabelConfig
+    local_day: date,
+    observations: Sequence[PiouObservation],
+    config: LabelConfig,
+    cutoff_local: datetime | None = None,
 ) -> dict[str, float] | None:
     timezone_local = ZoneInfo(config.timezone_name)
-    cutoff = local_boundary(local_day, config.cutoff_hour, timezone_local)
+    cutoff = cutoff_local or local_boundary(
+        local_day, config.cutoff_hour, timezone_local
+    )
+    if cutoff.tzinfo is None or cutoff.astimezone(timezone_local).date() != local_day:
+        raise ValueError("PiouPiou feature cutoff must be timezone-aware and on local_day")
     morning_start = local_boundary(
         local_day, config.piou_morning_start_hour, timezone_local
     )
@@ -1181,7 +1197,11 @@ def load_station_weather(
 
 def write_dataset(rows: Sequence[dict[str, Any]], output: Path) -> list[str]:
     output.parent.mkdir(parents=True, exist_ok=True)
-    leading = ["date", "year", "label"]
+    leading = [
+        name
+        for name in ("date", "year", "issue_minutes", "label")
+        if any(name in row for row in rows)
+    ]
     remaining = sorted(set().union(*(row.keys() for row in rows)).difference(leading))
     fields = leading + remaining
     temporary = output.with_suffix(output.suffix + ".part")
@@ -1236,6 +1256,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--weather-morning-start-hour", type=int, default=6)
     parser.add_argument("--maximum-weather-feature-age-minutes", type=float, default=90.0)
     parser.add_argument("--refresh-weather", action="store_true")
+    parser.add_argument("--refresh-open-meteo", action="store_true")
+    parser.add_argument(
+        "--skip-open-meteo",
+        action="store_true",
+        help="Build the legacy dataset without ECMWF/Open-Meteo feature columns",
+    )
     parser.add_argument("--offline", action="store_true")
     return parser
 
@@ -1276,6 +1302,22 @@ def main() -> int:
         args.refresh_weather,
         args.offline,
     )
+    open_meteo_days: dict[date, dict[str, float]] = {}
+    open_meteo_provenance: list[dict[str, str]] = []
+    if not args.skip_open_meteo:
+        try:
+            open_meteo_days, open_meteo_provenance = load_open_meteo_years(
+                args.cache_dir,
+                start_year,
+                end_year,
+                config.timezone_name,
+                config.weather_morning_start_hour,
+                config.cutoff_hour,
+                refresh=args.refresh_open_meteo,
+                offline=args.offline,
+            )
+        except (FileNotFoundError, ValueError) as error:
+            raise SystemExit(str(error)) from error
     rows: list[dict[str, Any]] = []
     days_without_weather = 0
     days_with_stale_weather = 0
@@ -1307,6 +1349,7 @@ def main() -> int:
             {
                 **row,
                 **airport,
+                **open_meteo_days.get(local_day, {}),
                 **spatial_weather_features(
                     optional_weather,
                     config.maximum_weather_feature_age_minutes,
@@ -1335,6 +1378,10 @@ def main() -> int:
             "fraction": available / len(rows),
             "by_year": by_year,
         }
+    open_meteo_available_days = sum(
+        int(row.get("nwp_core_observation_count_morning", 0.0) > 0)
+        for row in rows
+    )
     metadata = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "output": str(args.output),
@@ -1387,6 +1434,21 @@ def main() -> int:
                 f"[{config.weather_morning_start_hour:02d}:00,"
                 f"{config.cutoff_hour:02d}:00) Europe/Paris"
             ),
+        },
+        "open_meteo": {
+            "enabled": not args.skip_open_meteo,
+            "source_schema": OPEN_METEO_SOURCE_SCHEMA,
+            "model": OPEN_METEO_MODEL,
+            "requested_coordinates": [OPEN_METEO_LATITUDE, OPEN_METEO_LONGITUDE],
+            "variables": list(OPEN_METEO_VARIABLES),
+            "feature_policy": (
+                "hourly model values with local valid times in the configured morning "
+                "window; afternoon model values are excluded"
+            ),
+            "cache": open_meteo_provenance,
+            "available_days": open_meteo_available_days,
+            "total_days": len(rows),
+            "fraction": open_meteo_available_days / len(rows),
         },
     }
     args.metadata_output.parent.mkdir(parents=True, exist_ok=True)

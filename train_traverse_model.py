@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train a noon Traverse logistic classifier for one feature role."""
+"""Train a Traverse logistic classifier for one feature role."""
 
 from __future__ import annotations
 
@@ -24,6 +24,13 @@ from build_traverse_dataset import (
     WEATHER_STATIONS,
     label_config_from_payload,
 )
+from open_meteo_features import (
+    OPEN_METEO_LATITUDE,
+    OPEN_METEO_LONGITUDE,
+    OPEN_METEO_MODEL,
+    OPEN_METEO_SOURCE_SCHEMA,
+    OPEN_METEO_VARIABLES,
+)
 from traverse_model import (
     load_daily_dataset,
     save_model_bundle,
@@ -36,7 +43,10 @@ from traverse_model import (
 
 PROVENANCE_FILES = (
     "build_traverse_dataset.py",
+    "build_timestep_traverse_dataset.py",
+    "open_meteo_features.py",
     "prepare_noon_features.py",
+    "prepare_timestep_features.py",
     "traverse_model.py",
     "train_traverse_model.py",
     "predict_traverse.py",
@@ -45,6 +55,8 @@ PROVENANCE_FILES = (
     "pyproject.toml",
     "uv.lock",
     "tests/test_build_traverse_dataset.py",
+    "tests/test_timestep_traverse.py",
+    "tests/test_open_meteo_features.py",
     "tests/test_traverse_model.py",
 )
 
@@ -74,14 +86,18 @@ def runtime_provenance() -> tuple[dict[str, object], list[str]]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dataset", type=Path, default=Path("artifacts/traverse_daily.csv"))
+    parser.add_argument(
+        "--dataset", type=Path, default=Path("artifacts/traverse_timestep.csv")
+    )
     parser.add_argument(
         "--metadata",
         type=Path,
         help="Dataset metadata JSON (default: DATASET with .metadata.json suffix)",
     )
     parser.add_argument(
-        "--role", choices=("baseline", "variant", "spatial"), required=True
+        "--role",
+        choices=("baseline", "variant", "spatial", "nwp", "same_day"),
+        default="same_day",
     )
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument(
@@ -129,41 +145,73 @@ def main() -> int:
         label_config_from_payload(dataset_metadata.get("label_config"))
     except ValueError as error:
         raise SystemExit(f"Invalid dataset label contract: {error}") from error
-    piou_station_id = dataset_metadata.get("pioupiou", {}).get("station_id")
-    weather_station_id = dataset_metadata.get("meteofrance", {}).get("station_id")
-    if piou_station_id is None or weather_station_id is None:
-        raise SystemExit("Dataset metadata must identify both source stations")
-    if dataset_metadata["pioupiou"].get("source_schema") != PIOU_SOURCE_SCHEMA or (
-        dataset_metadata["meteofrance"].get("source_schema")
-        != METEO_FRANCE_SOURCE_SCHEMA
-    ):
-        raise SystemExit("Dataset metadata has an unsupported source schema")
-    station_manifest = dataset_metadata.get("meteofrance", {}).get("station_manifest")
-    expected_station_manifest = [asdict(station) for station in WEATHER_STATIONS]
-    if args.role == "spatial" and station_manifest != expected_station_manifest:
-        raise SystemExit("Spatial training requires the configured weather station manifest")
+    if args.role == "same_day":
+        if "issue_minutes" not in frame.columns:
+            raise SystemExit("Same-day training requires an issue_minutes column")
+    else:
+        piou = dataset_metadata["pioupiou"]
+        weather = dataset_metadata["meteofrance"]
+        piou_station_id = piou["station_id"]
+        weather_station_id = weather["station_id"]
+        if (
+            piou["source_schema"] != PIOU_SOURCE_SCHEMA
+            or weather["source_schema"] != METEO_FRANCE_SOURCE_SCHEMA
+        ):
+            raise SystemExit("Dataset metadata has an unsupported source schema")
+        station_manifest = weather.get("station_manifest")
+        if args.role == "spatial" and station_manifest != [
+            asdict(station) for station in WEATHER_STATIONS
+        ]:
+            raise SystemExit(
+                "Spatial training requires the configured weather station manifest"
+            )
+        open_meteo_metadata = dataset_metadata.get("open_meteo", {})
+        if args.role == "nwp" and (
+            not open_meteo_metadata.get("enabled")
+            or open_meteo_metadata.get("source_schema") != OPEN_METEO_SOURCE_SCHEMA
+            or open_meteo_metadata.get("model") != OPEN_METEO_MODEL
+            or open_meteo_metadata.get("variables") != list(OPEN_METEO_VARIABLES)
+        ):
+            raise SystemExit(
+                "NWP training requires the configured ECMWF/Open-Meteo dataset"
+            )
+    l2_candidates = (1.0, 10.0) if args.role == "same_day" else (0.01, 0.1, 1.0, 10.0)
     bundle, metrics = train_and_evaluate(
         frame,
         args.role,
+        l2_candidates=l2_candidates,
         smoke=args.smoke,
         label_config=dataset_metadata["label_config"],
     )
     artifact = bundle["metadata"]
-    artifact["input_contract"] = {
-        "schema_version": 3 if args.role == "spatial" else 2,
-        "dataset_sha256": dataset_sha256,
-        "label_config_sha256": sha256_json(dataset_metadata["label_config"]),
-        "feature_schema_sha256": sha256_json(artifact["feature_names"]),
-        "piou_station_id": str(piou_station_id),
-        "piou_source_schema": PIOU_SOURCE_SCHEMA,
-        "weather_station_id": str(weather_station_id),
-        "weather_source_schema": METEO_FRANCE_SOURCE_SCHEMA,
-    }
+    if args.role != "same_day":
+        artifact["input_contract"] = {
+            "schema_version": {"spatial": 3, "nwp": 4}.get(args.role, 2),
+            "dataset_sha256": dataset_sha256,
+            "label_config_sha256": sha256_json(dataset_metadata["label_config"]),
+            "feature_schema_sha256": sha256_json(artifact["feature_names"]),
+            "piou_station_id": str(piou_station_id),
+            "piou_source_schema": PIOU_SOURCE_SCHEMA,
+            "weather_station_id": str(weather_station_id),
+            "weather_source_schema": METEO_FRANCE_SOURCE_SCHEMA,
+        }
     if args.role == "spatial":
         artifact["input_contract"].update(
             {
                 "weather_station_manifest": station_manifest,
                 "weather_station_manifest_sha256": sha256_json(station_manifest),
+            }
+        )
+    if args.role == "nwp":
+        artifact["input_contract"].update(
+            {
+                "open_meteo_source_schema": OPEN_METEO_SOURCE_SCHEMA,
+                "open_meteo_model": OPEN_METEO_MODEL,
+                "open_meteo_coordinates": [
+                    OPEN_METEO_LATITUDE,
+                    OPEN_METEO_LONGITUDE,
+                ],
+                "open_meteo_variables": list(OPEN_METEO_VARIABLES),
             }
         )
     artifact["dataset"] = str(args.dataset)
@@ -219,20 +267,25 @@ def main() -> int:
             "validation/selected_threshold": float(artifact["model"]["threshold"]),
         }
     )
-    for station, coverage in dataset_metadata["meteofrance"].get(
-        "station_temperature_coverage", {}
-    ).items():
-        flat[f"data/{station}_temperature_coverage"] = float(coverage["fraction"])
-    flat["data/piou_invalid_location_rows"] = float(
-        dataset_metadata["pioupiou"]["counters"].get("invalid_location_rows", 0)
-    )
+    if args.role != "same_day":
+        for station, coverage in dataset_metadata["meteofrance"].get(
+            "station_temperature_coverage", {}
+        ).items():
+            flat[f"data/{station}_temperature_coverage"] = float(
+                coverage["fraction"]
+            )
+        flat["data/piou_invalid_location_rows"] = float(
+            dataset_metadata["pioupiou"]["counters"].get(
+                "invalid_location_rows", 0
+            )
+        )
     mode = args.wandb_mode
     if mode == "auto":
         mode = "online" if os.environ.get("WANDB_API_KEY") else "offline"
     if mode != "disabled":
         import wandb
 
-        configured_l2_candidates = [1.0] if args.smoke else [0.01, 0.1, 1.0, 10.0]
+        configured_l2_candidates = [1.0] if args.smoke else list(l2_candidates)
         configured_c_candidates = [1.0 / value for value in configured_l2_candidates]
         selection_years = [2018, 2019] if args.smoke else [2020, 2021, 2022]
         run = wandb.init(

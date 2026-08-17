@@ -112,24 +112,30 @@ class TraverseModelTests(unittest.TestCase):
         self.assertTrue(np.isnan(result.iloc[0]["a"]))
         self.assertEqual(result.iloc[0]["b"], 2.0)
 
-    def test_spatial_role_adds_only_spatial_feature_blocks(self):
+    def test_enriched_roles_add_only_their_feature_blocks(self):
         frame = pd.DataFrame(
             {
                 "cal_doy_sin": [0.0],
                 "piou_last_wind_avg_kmh": [5.0],
                 "mf_temperature_c_latest": [12.0],
                 "mfs_belley_temperature_c_latest": [11.0],
+                "nwp_temperature_c_latest": [10.0],
                 "debug_value": [99.0],
             }
         )
         variant = feature_names_for_role(frame, "variant")
         spatial = feature_names_for_role(frame, "spatial")
+        nwp = feature_names_for_role(frame, "nwp")
 
         self.assertEqual(
             set(spatial).difference(variant),
             {"mfs_belley_temperature_c_latest"},
         )
         self.assertNotIn("debug_value", spatial)
+        self.assertEqual(
+            set(nwp).difference(variant), {"nwp_temperature_c_latest"}
+        )
+        self.assertNotIn("mfs_belley_temperature_c_latest", nwp)
 
     def test_noon_preparer_emits_exact_model_schema(self):
         prepared = {"date": "2025-09-21", "year": 2025, "a": 1, "new_field": 2}
@@ -286,6 +292,57 @@ class TraverseModelTests(unittest.TestCase):
             unavailable_primary["mf_core_observation_count_morning"] = 0
             with self.assertRaisesRegex(ValueError, "unavailable mf_"):
                 predict_frame(path, unavailable_primary)
+
+    def test_nwp_inference_requires_fresh_grid_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "model.joblib"
+            features = [
+                "piou_last_wind_avg_kmh",
+                "piou_observation_count_morning",
+                "piou_last_age_minutes",
+                "mf_temperature_c_latest",
+                "mf_core_observation_count_morning",
+                "mf_last_age_minutes",
+                "nwp_temperature_c_latest",
+                "nwp_core_observation_count_morning",
+                "nwp_last_age_minutes",
+            ]
+            save_fitted_model(
+                path,
+                {
+                    "role": "nwp",
+                    "label": {
+                        "maximum_feature_age_minutes": 30,
+                        "maximum_weather_feature_age_minutes": 90,
+                    },
+                },
+                features,
+            )
+            row = pd.DataFrame(
+                {
+                    "piou_last_wind_avg_kmh": [5.0],
+                    "piou_observation_count_morning": [10],
+                    "piou_last_age_minutes": [4],
+                    "mf_temperature_c_latest": [12.0],
+                    "mf_core_observation_count_morning": [6],
+                    "mf_last_age_minutes": [60],
+                    "nwp_temperature_c_latest": [11.0],
+                    "nwp_core_observation_count_morning": [6],
+                    "nwp_last_age_minutes": [60],
+                }
+            )
+            probability, _, _ = predict_frame(path, row)
+            self.assertTrue(np.isfinite(probability).all())
+
+            unavailable = row.copy()
+            unavailable["nwp_core_observation_count_morning"] = 0
+            with self.assertRaisesRegex(ValueError, "unavailable nwp_"):
+                predict_frame(path, unavailable)
+
+            stale = row.copy()
+            stale["nwp_last_age_minutes"] = 91
+            with self.assertRaisesRegex(ValueError, "stale nwp_"):
+                predict_frame(path, stale)
 
     def test_comparison_binds_actual_dataset_and_model_files(self):
         with tempfile.TemporaryDirectory() as directory:

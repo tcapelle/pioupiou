@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score one prepared noon feature row with a trained Traverse model."""
+"""Score one prepared or historical row with a trained Traverse model."""
 
 from __future__ import annotations
 
@@ -16,6 +16,13 @@ from build_traverse_dataset import (
     PIOU_SOURCE_SCHEMA,
     label_config_from_payload,
     local_boundary,
+)
+from open_meteo_features import (
+    OPEN_METEO_LATITUDE,
+    OPEN_METEO_LONGITUDE,
+    OPEN_METEO_MODEL,
+    OPEN_METEO_SOURCE_SCHEMA,
+    OPEN_METEO_VARIABLES,
 )
 from traverse_model import (
     load_artifact_with_sha256,
@@ -35,10 +42,13 @@ def validate_prepared_contract(
     )
     row = pd_row
     role = payload.get("role")
-    if role not in {"variant", "spatial"}:
+    if role not in {"variant", "spatial", "nwp"}:
         raise ValueError("invalid_model: prepared rows require a weather-based model")
     contract = payload.get("input_contract")
-    expected_schema_version = 3 if role == "spatial" else 2
+    expected_schema_version = {
+        "spatial": 3,
+        "nwp": 4,
+    }.get(role, 2)
     if (
         not isinstance(contract, dict)
         or contract.get("schema_version") != expected_schema_version
@@ -65,6 +75,10 @@ def validate_prepared_contract(
     }
     if role == "spatial":
         required.add("meta_weather_station_manifest_sha256")
+    if role == "nwp":
+        required.update(
+            {"meta_open_meteo_source_schema", "meta_open_meteo_model"}
+        )
     missing = sorted(required.difference(row.columns))
     if missing:
         raise ValueError(f"incompatible_features: missing contract columns {missing}")
@@ -72,7 +86,7 @@ def validate_prepared_contract(
     supplied_features = {
         name
         for name in row.columns
-        if name.startswith(("cal_", "piou_", "mf_", "mfs_"))
+        if name.startswith(("cal_", "piou_", "mf_", "mfs_", "nwp_"))
     }
     if supplied_features != expected_features:
         missing_features = sorted(expected_features - supplied_features)
@@ -101,6 +115,23 @@ def validate_prepared_contract(
         if station_manifest_sha256 != sha256_json(station_manifest):
             raise ValueError("invalid_model: weather station manifest fingerprint mismatch")
         expected["meta_weather_station_manifest_sha256"] = station_manifest_sha256
+    if role == "nwp":
+        if (
+            contract.get("open_meteo_source_schema") != OPEN_METEO_SOURCE_SCHEMA
+            or contract.get("open_meteo_model") != OPEN_METEO_MODEL
+            or contract.get("open_meteo_coordinates")
+            != [OPEN_METEO_LATITUDE, OPEN_METEO_LONGITUDE]
+            or contract.get("open_meteo_variables") != list(OPEN_METEO_VARIABLES)
+        ):
+            raise ValueError("invalid_model: unsupported ECMWF/Open-Meteo contract")
+        expected.update(
+            {
+                "meta_open_meteo_source_schema": contract[
+                    "open_meteo_source_schema"
+                ],
+                "meta_open_meteo_model": contract["open_meteo_model"],
+            }
+        )
     mismatches = [
         name for name, expected_value in expected.items() if value(name) != expected_value
     ]
@@ -138,16 +169,22 @@ def validate_prepared_contract(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--model", type=Path, default=Path("artifacts/traverse_model_variant.joblib")
+        "--model", type=Path, default=Path("artifacts/traverse_model_same_day.joblib")
+    )
+    parser.add_argument(
+        "--time",
+        help="HH:MM issue time for a same-day timestep dataset",
     )
     parser.add_argument(
         "--model-sha256",
         help="Trusted out-of-band SHA-256 to verify before joblib deserialization",
     )
-    parser.add_argument("--dataset", type=Path, default=Path("artifacts/traverse_daily.csv"))
+    parser.add_argument(
+        "--dataset", type=Path, default=Path("artifacts/traverse_timestep.csv")
+    )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--date", help="Select a prepared historical day from --dataset")
-    source.add_argument("--features", type=Path, help="CSV containing one prepared noon row")
+    source.add_argument("--features", type=Path, help="CSV containing one prepared row")
     args = parser.parse_args()
 
     if args.features:
@@ -162,7 +199,10 @@ def main() -> int:
             loaded_artifact = load_artifact_with_sha256(
                 args.model, expected_model_sha256
             )
-            validate_prepared_contract(args.model, row, loaded_artifact)
+            if loaded_artifact[0].get("role") != "same_day":
+                validate_prepared_contract(args.model, row, loaded_artifact)
+            elif "issue_minutes" not in row:
+                raise ValueError("same-day features require issue_minutes")
         except (ValueError, KeyError) as error:
             print(json.dumps({"date": prediction_date, "status": str(error)}, indent=2))
             return 2
@@ -179,6 +219,18 @@ def main() -> int:
             raise SystemExit("Historical dataset SHA-256 does not match the model artifact")
         frame = pd.read_csv(args.dataset)
         row = frame[frame["date"].astype(str) == args.date]
+        if "issue_minutes" in row.columns:
+            if args.time is None:
+                raise SystemExit("--time is required for a same-day timestep dataset")
+            try:
+                parsed_time = datetime.strptime(args.time, "%H:%M")
+            except ValueError as error:
+                raise SystemExit("--time must use HH:MM") from error
+            requested_minutes = parsed_time.hour * 60 + parsed_time.minute
+            row = row[
+                pd.to_numeric(row["issue_minutes"], errors="coerce")
+                == requested_minutes
+            ]
         if len(row) != 1:
             raise SystemExit(f"Expected exactly one prepared row for {args.date}, found {len(row)}")
         prediction_date = args.date
@@ -193,6 +245,12 @@ def main() -> int:
         json.dumps(
             {
                 "date": prediction_date,
+                "issue_time": (
+                    f"{int(row.iloc[0]['issue_minutes']) // 60:02d}:"
+                    f"{int(row.iloc[0]['issue_minutes']) % 60:02d}"
+                    if "issue_minutes" in row.columns
+                    else None
+                ),
                 "status": "ok",
                 "traverse_probability": float(probability[0]),
                 "predict_traverse": bool(predicted[0]),

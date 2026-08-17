@@ -20,6 +20,17 @@ from traverse_model import (
 )
 
 
+def sampled_date_cluster_positions(
+    dates: np.ndarray, sampled_clusters: np.ndarray
+) -> np.ndarray:
+    """Expand sampled unique-date indexes to all row positions for each date."""
+    values = np.asarray(dates)
+    unique_dates = np.unique(values)
+    return np.concatenate(
+        [np.flatnonzero(values == unique_dates[index]) for index in sampled_clusters]
+    )
+
+
 def load_validated_inputs(dataset: Path, reference: Path, candidate: Path):
     frame = load_daily_dataset(dataset)
     reference_values = load_artifact(reference)
@@ -104,9 +115,12 @@ def main() -> int:
     )
 
     generator = np.random.default_rng(args.seed)
+    test_dates = test["date"].to_numpy()
+    date_count = int(test["date"].nunique())
     differences: list[float] = []
     for _ in range(args.replicates):
-        positions = generator.integers(0, len(test), size=len(test))
+        sampled_clusters = generator.integers(0, date_count, size=date_count)
+        positions = sampled_date_cluster_positions(test_dates, sampled_clusters)
         sampled_target = target[positions]
         if sampled_target.sum() == 0:
             continue
@@ -120,9 +134,13 @@ def main() -> int:
         "comparison": f"{candidate_role}_minus_{reference_role}",
         "test_years": test_years,
         "test_rows": len(test),
+        "test_dates": date_count,
         "point_difference": point_difference,
         "bootstrap": {
-            "method": "paired iid resampling of held-out local days with replacement",
+            "method": (
+                "paired cluster resampling of held-out local dates with replacement; "
+                "all issue-time rows for a sampled date stay together"
+            ),
             "seed": args.seed,
             "requested_replicates": args.replicates,
             "completed_replicates": len(differences),
