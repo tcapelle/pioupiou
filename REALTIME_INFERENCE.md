@@ -252,8 +252,8 @@ They are calculated from the requested date and minute in `Europe/Paris`.
 5. Enforce the 30-minute PiouPiou and 90-minute Météo-France freshness limits.
 6. Bind the row to the feature names stored in the model artifact and score it
    with the existing prediction pipeline.
-7. Print the issue time, source ages, model checksum, probability, and
-   thresholded result.
+7. Print the prediction time, latest timestamp and age of each source, model
+   checksum, probability, and thresholded result.
 
 No observations need to be persisted to make one prediction, but retaining the
 raw responses and produced feature rows is valuable for reproducibility and

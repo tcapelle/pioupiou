@@ -124,6 +124,14 @@ def main() -> int:
     )
     if piou is None:
         raise SystemExit("insufficient_data: missing or stale Windbird observations")
+    piou_start = datetime.combine(
+        cutoff.date(), time(config.piou_morning_start_hour), local_timezone
+    )
+    piou_latest = max(
+        item.timestamp_local
+        for item in piou_observations
+        if piou_start <= item.timestamp_local < cutoff
+    )
 
     meteo_payload = fetch_json(METEO_URL, token)
     meteo_observations = meteofrance_observations(meteo_payload, cutoff)
@@ -154,9 +162,13 @@ def main() -> int:
     print(
         json.dumps(
             {
-                "issue_time": cutoff.isoformat(),
+                "prediction_time": cutoff.isoformat(),
                 "model_sha256": model_sha256,
+                "piou_observation_time": piou_latest.isoformat(),
                 "piou_last_age_minutes": piou["piou_last_age_minutes"],
+                "mf_observation_time": meteo_observations[-1][
+                    "timestamp_local"
+                ].isoformat(),
                 "mf_last_age_minutes": meteo["mf_last_age_minutes"],
                 "traverse_probability": float(probability[0]),
                 "predict_traverse": bool(predicted[0]),
