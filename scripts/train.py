@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Train a Traverse logistic classifier for one feature role."""
+"""Train the same-day Traverse classifier."""
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
 from importlib import metadata as importlib_metadata
 import json
 import os
@@ -18,21 +17,9 @@ import scipy
 import sklearn
 import threadpoolctl
 
-from pioupiou.data.daily import (
-    METEO_FRANCE_SOURCE_SCHEMA,
-    PIOU_SOURCE_SCHEMA,
-    WEATHER_STATIONS,
-    label_config_from_payload,
-)
-from pioupiou.feature_eng.open_meteo import (
-    OPEN_METEO_LATITUDE,
-    OPEN_METEO_LONGITUDE,
-    OPEN_METEO_MODEL,
-    OPEN_METEO_SOURCE_SCHEMA,
-    OPEN_METEO_VARIABLES,
-)
+from pioupiou.data.daily import label_config_from_payload
 from pioupiou.inference.model import (
-    load_daily_dataset,
+    load_dataset,
     save_model_bundle,
     save_json,
     sha256_file,
@@ -44,21 +31,16 @@ from pioupiou.inference.model import (
 PROVENANCE_FILES = (
     "pioupiou/data/daily.py",
     "pioupiou/data/timestep.py",
-    "pioupiou/feature_eng/open_meteo.py",
     "pioupiou/inference/model.py",
-    "scripts/build_dataset.py",
     "scripts/build_timestep_dataset.py",
-    "scripts/prepare_noon.py",
     "scripts/prepare_timestep.py",
     "scripts/train.py",
     "scripts/predict.py",
-    "scripts/evaluate.py",
     ".python-version",
     "pyproject.toml",
     "uv.lock",
-    "tests/test_build_traverse_dataset.py",
+    "tests/test_observation_features.py",
     "tests/test_timestep_traverse.py",
-    "tests/test_open_meteo_features.py",
     "tests/test_traverse_model.py",
 )
 
@@ -96,11 +78,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Dataset metadata JSON (default: DATASET with .metadata.json suffix)",
     )
-    parser.add_argument(
-        "--role",
-        choices=("baseline", "variant", "spatial", "nwp", "same_day"),
-        default="same_day",
-    )
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument(
         "--smoke",
@@ -134,7 +111,7 @@ def main() -> int:
     dataset_sha256 = sha256_file(args.dataset)
     if dataset_metadata.get("output_sha256") != dataset_sha256:
         raise SystemExit("Dataset SHA-256 does not match its metadata")
-    frame = load_daily_dataset(args.dataset)
+    frame = load_dataset(args.dataset)
     if int(dataset_metadata.get("row_count", -1)) != len(frame):
         raise SystemExit("Dataset row count does not match its metadata")
     actual_range = [
@@ -147,75 +124,16 @@ def main() -> int:
         label_config_from_payload(dataset_metadata.get("label_config"))
     except ValueError as error:
         raise SystemExit(f"Invalid dataset label contract: {error}") from error
-    if args.role == "same_day":
-        if "issue_minutes" not in frame.columns:
-            raise SystemExit("Same-day training requires an issue_minutes column")
-    else:
-        piou = dataset_metadata["pioupiou"]
-        weather = dataset_metadata["meteofrance"]
-        piou_station_id = piou["station_id"]
-        weather_station_id = weather["station_id"]
-        if (
-            piou["source_schema"] != PIOU_SOURCE_SCHEMA
-            or weather["source_schema"] != METEO_FRANCE_SOURCE_SCHEMA
-        ):
-            raise SystemExit("Dataset metadata has an unsupported source schema")
-        station_manifest = weather.get("station_manifest")
-        if args.role == "spatial" and station_manifest != [
-            asdict(station) for station in WEATHER_STATIONS
-        ]:
-            raise SystemExit(
-                "Spatial training requires the configured weather station manifest"
-            )
-        open_meteo_metadata = dataset_metadata.get("open_meteo", {})
-        if args.role == "nwp" and (
-            not open_meteo_metadata.get("enabled")
-            or open_meteo_metadata.get("source_schema") != OPEN_METEO_SOURCE_SCHEMA
-            or open_meteo_metadata.get("model") != OPEN_METEO_MODEL
-            or open_meteo_metadata.get("variables") != list(OPEN_METEO_VARIABLES)
-        ):
-            raise SystemExit(
-                "NWP training requires the configured ECMWF/Open-Meteo dataset"
-            )
-    l2_candidates = (1.0, 10.0) if args.role == "same_day" else (0.01, 0.1, 1.0, 10.0)
+    if "issue_minutes" not in frame.columns:
+        raise SystemExit("Training requires a same-day timestep dataset")
+    l2_candidates = (1.0, 10.0)
     bundle, metrics = train_and_evaluate(
         frame,
-        args.role,
         l2_candidates=l2_candidates,
         smoke=args.smoke,
         label_config=dataset_metadata["label_config"],
     )
     artifact = bundle["metadata"]
-    if args.role != "same_day":
-        artifact["input_contract"] = {
-            "schema_version": {"spatial": 3, "nwp": 4}.get(args.role, 2),
-            "dataset_sha256": dataset_sha256,
-            "label_config_sha256": sha256_json(dataset_metadata["label_config"]),
-            "feature_schema_sha256": sha256_json(artifact["feature_names"]),
-            "piou_station_id": str(piou_station_id),
-            "piou_source_schema": PIOU_SOURCE_SCHEMA,
-            "weather_station_id": str(weather_station_id),
-            "weather_source_schema": METEO_FRANCE_SOURCE_SCHEMA,
-        }
-    if args.role == "spatial":
-        artifact["input_contract"].update(
-            {
-                "weather_station_manifest": station_manifest,
-                "weather_station_manifest_sha256": sha256_json(station_manifest),
-            }
-        )
-    if args.role == "nwp":
-        artifact["input_contract"].update(
-            {
-                "open_meteo_source_schema": OPEN_METEO_SOURCE_SCHEMA,
-                "open_meteo_model": OPEN_METEO_MODEL,
-                "open_meteo_coordinates": [
-                    OPEN_METEO_LATITUDE,
-                    OPEN_METEO_LONGITUDE,
-                ],
-                "open_meteo_variables": list(OPEN_METEO_VARIABLES),
-            }
-        )
     artifact["dataset"] = str(args.dataset)
     runtime, installed_packages = runtime_provenance()
     artifact["runtime"] = runtime
@@ -228,10 +146,10 @@ def main() -> int:
         },
     }
     artifact["metrics"] = metrics
-    suffix = f"{args.role}{'-smoke' if args.smoke else ''}"
-    model_path = args.output_dir / f"traverse_model_{suffix}.joblib"
-    model_metadata_path = args.output_dir / f"traverse_model_{suffix}.metadata.json"
-    metrics_path = args.output_dir / f"traverse_metrics_{suffix}.json"
+    suffix = "-smoke" if args.smoke else ""
+    model_path = args.output_dir / f"traverse_model{suffix}.joblib"
+    model_metadata_path = args.output_dir / f"traverse_model{suffix}.metadata.json"
+    metrics_path = args.output_dir / f"traverse_metrics{suffix}.json"
     environment_path = args.output_dir / "python_environment.txt"
     args.output_dir.mkdir(parents=True, exist_ok=True)
     environment_path.write_text("\n".join(installed_packages) + "\n")
@@ -244,7 +162,6 @@ def main() -> int:
     )
     save_json(
         {
-            "role": args.role,
             "smoke": args.smoke,
             "model_sha256": model_sha256,
             "metrics": metrics,
@@ -269,18 +186,6 @@ def main() -> int:
             "validation/selected_threshold": float(artifact["model"]["threshold"]),
         }
     )
-    if args.role != "same_day":
-        for station, coverage in dataset_metadata["meteofrance"].get(
-            "station_temperature_coverage", {}
-        ).items():
-            flat[f"data/{station}_temperature_coverage"] = float(
-                coverage["fraction"]
-            )
-        flat["data/piou_invalid_location_rows"] = float(
-            dataset_metadata["pioupiou"]["counters"].get(
-                "invalid_location_rows", 0
-            )
-        )
     mode = args.wandb_mode
     if mode == "auto":
         mode = "online" if os.environ.get("WANDB_API_KEY") else "offline"
@@ -296,7 +201,6 @@ def main() -> int:
             tags=[tag for tag in args.wandb_tags.split(",") if tag],
             mode=mode,
             config={
-                "role": args.role,
                 "smoke": args.smoke,
                 "dataset": str(args.dataset),
                 "dataset_metadata": str(metadata_path),
@@ -338,9 +242,6 @@ def main() -> int:
                 },
                 "metrics_backend": "sklearn.metrics",
                 "model_schema_version": 2,
-                "input_contract_schema_version": artifact["input_contract"][
-                    "schema_version"
-                ],
                 "model_serialization": "joblib",
                 "runtime_versions": {
                     key: runtime[key]
@@ -366,7 +267,7 @@ def main() -> int:
         run.summary["model_sha256"] = model_sha256
         if not args.smoke:
             dataset_wandb_artifact = wandb.Artifact(
-                "pioupiou-traverse-daily",
+                "pioupiou-traverse-timestep",
                 type="dataset",
                 metadata={
                     "dataset_sha256": artifact["provenance"]["dataset_sha256"],
@@ -389,7 +290,7 @@ def main() -> int:
                 source_wandb_artifact.add_file(source_path)
             run.log_artifact(source_wandb_artifact)
             model_wandb_artifact = wandb.Artifact(
-                f"pioupiou-traverse-{args.role}-sklearn-v2",
+                "pioupiou-traverse-model-sklearn-v2",
                 type="model",
                 metadata={"model_sha256": model_sha256, "schema_version": 2},
             )
@@ -401,7 +302,6 @@ def main() -> int:
         run.finish()
 
     summary = {
-        "role": args.role,
         "smoke": args.smoke,
         "model_path": str(model_path),
         "model_sha256": model_sha256,

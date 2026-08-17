@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 from datetime import date, datetime, timezone
@@ -15,39 +16,63 @@ from pioupiou.data.timestep import (
     DEFAULT_START_MINUTES,
     build_primary_weather_timeline,
     cutoff_for_minutes,
-    historical_traverse_features,
     issue_time_features,
     parse_clock,
     traverse_progress_features,
 )
 from pioupiou.data.daily import (
     calendar_features,
-    group_piou_by_local_day,
-    iter_unique_piou,
+    deduplicate_piou_observations,
     label_config_from_payload,
     piou_features,
-    target_label,
+    read_month,
 )
 from pioupiou.inference.model import load_artifact_with_sha256
-from scripts.prepare_noon import bind_to_model_schema, write_feature_row
 
 
-def load_piou_history_and_day(
-    input_dir: Path, local_day: date, config
-) -> tuple[dict[date, int], list]:
-    iterator, _ = iter_unique_piou(input_dir, ZoneInfo(config.timezone_name))
-    previous_labels: dict[date, int] = {}
-    requested_observations = []
-    for candidate_day, observations in group_piou_by_local_day(iterator):
-        if candidate_day < local_day:
-            values = target_label(candidate_day, observations, config)
-            if values is not None:
-                previous_labels[candidate_day] = int(values["label"])
-        elif candidate_day == local_day:
-            requested_observations = observations
-        elif candidate_day > local_day:
-            break
-    return previous_labels, requested_observations
+def write_feature_row(row: dict[str, object], output: Path) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    leading = [name for name in ("date", "year", "issue_minutes") if name in row]
+    fields = leading + sorted(set(row).difference(leading))
+    temporary = output.with_suffix(output.suffix + ".part")
+    with temporary.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerow(
+            {
+                name: ""
+                if isinstance(row.get(name), float) and not math.isfinite(row[name])
+                else row.get(name, "")
+                for name in fields
+            }
+        )
+    temporary.replace(output)
+
+
+def bind_to_model_schema(
+    prepared: dict[str, object], feature_names: list[str]
+) -> dict[str, object]:
+    """Return identity fields and the exact ordered model feature schema."""
+    missing = sorted({"date", "year", *feature_names}.difference(prepared))
+    if missing:
+        raise ValueError(f"Cannot construct trained model features: {missing}")
+    return {
+        "date": prepared["date"],
+        "year": prepared["year"],
+        **{name: prepared[name] for name in feature_names},
+    }
+
+
+def load_piou_day(input_dir: Path, local_day: date, timezone_name: str) -> list:
+    path = input_dir / f"{local_day:%Y-%m}.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"PiouPiou month file not found: {path}")
+    timezone_local = ZoneInfo(timezone_name)
+    return deduplicate_piou_observations(
+        item
+        for item in read_month(path, timezone_local)
+        if item.timestamp_local.date() == local_day
+    )
 
 
 def main() -> int:
@@ -57,7 +82,7 @@ def main() -> int:
     parser.add_argument(
         "--model",
         type=Path,
-        default=Path("artifacts/traverse_model_same_day.joblib"),
+        default=Path("artifacts/traverse_model.joblib"),
     )
     parser.add_argument("--piou-input-dir", type=Path, default=Path("pioudata"))
     parser.add_argument("--cache-dir", type=Path, default=Path("pioudata/.weather_cache"))
@@ -74,8 +99,6 @@ def main() -> int:
         payload, _, _ = load_artifact_with_sha256(args.model)
     except ValueError as error:
         raise SystemExit(str(error)) from error
-    if payload.get("role") != "same_day":
-        raise SystemExit("Arbitrary-time preparation requires a same_day model")
     try:
         config = label_config_from_payload(payload.get("label"))
     except ValueError as error:
@@ -92,8 +115,8 @@ def main() -> int:
     if cutoff.astimezone(timezone.utc) > datetime.now(timezone.utc):
         raise SystemExit("Requested feature cutoff has not occurred yet")
 
-    history_labels, observations = load_piou_history_and_day(
-        args.piou_input_dir, local_day, config
+    observations = load_piou_day(
+        args.piou_input_dir, local_day, config.timezone_name
     )
     if not observations:
         raise SystemExit(f"No PiouPiou observations found for {local_day}")
@@ -127,7 +150,6 @@ def main() -> int:
         **calendar_features(local_day),
         "issue_minutes": issue_minutes,
         **issue_time_features(issue_minutes),
-        **historical_traverse_features(local_day, history_labels),
         **piou,
         **traverse_progress_features(local_day, observations, config, cutoff),
         **airport,
