@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from realtime_inference import meteofrance_observations
 from pioupiou.data.daily import (
     LabelConfig,
     PiouObservation,
@@ -110,6 +111,34 @@ class ObservationFeatureTests(unittest.TestCase):
         self.assertEqual(features["mf_last_age_minutes"], 60.0)
         self.assertEqual(features["mf_dewpoint_depression_c_latest"], 6.0)
         self.assertAlmostEqual(features["mf_global_radiation_mean_w_m2"], 1000.0)
+
+    def test_realtime_weather_mapping_preserves_units_and_cutoff(self):
+        row = {
+            "geo_id_insee": "73329001",
+            "lat": 45.641333,
+            "lon": 5.877833,
+            "validity_time": "2024-07-01T09:00:00Z",
+            "t": 293.15,
+            "td": 283.15,
+            "u": 60,
+            "rr1": 1,
+            "pmer": 101200,
+            "pres": 98500,
+            "vv": 20000,
+            "n": 4,
+            "insolh": 30,
+            "ray_glo01": 3_600_000,
+            "ff": 3,
+            "dd": 270,
+        }
+        at_cutoff = {**row, "validity_time": "2024-07-01T10:00:00Z"}
+        observations = meteofrance_observations(
+            [row, at_cutoff], datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)
+        )
+        self.assertEqual(len(observations), 1)
+        self.assertAlmostEqual(observations[0]["T"], 20.0)
+        self.assertAlmostEqual(observations[0]["PMER"], 1012.0)
+        self.assertAlmostEqual(observations[0]["GLO"], 360.0)
 
     def test_weather_quality_is_an_explicit_whitelist(self):
         self.assertEqual(weather_value({"T": "12.3", "QT": "0"}, "T"), 12.3)

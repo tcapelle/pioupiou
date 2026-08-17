@@ -9,13 +9,20 @@ time from two observation feeds and the local clock:
 | --- | ---: | --- | --- |
 | `cal_` | 4 | Requested local date and time | Available locally |
 | `piou_` | 33 | OpenWindMap Windbird 2176 | Live and archive feeds verified |
-| `mf_` | 34 | Météo-France CHAMBERY-AIX, station `73329001` | Real-time API documented; credentials and station-field acceptance check still required |
+| `mf_` | 34 | Météo-France CHAMBERY-AIX, station `73329001` | Live feed verified for the configured station |
 
-The repository does not yet perform real-time acquisition.
-`scripts.prepare_timestep` reads monthly PiouPiou CSV files and the historical
-Météo-France cache. Real-time inference therefore requires source adapters,
-unit normalization, and operational freshness checks, but no change to the
-trained model or its feature engineering.
+The root-level `realtime_inference.py` command implements this path with the
+existing feature engineering and trained model. It expects a temporary
+Météo-France bearer token in `METEOFRANCE_TOKEN` and does not persist API
+responses.
+
+```bash
+uv run python realtime_inference.py \
+  --model artifacts/traverse_model.joblib
+```
+
+`scripts.prepare_timestep` remains the retrospective path backed by monthly
+PiouPiou CSV files and the historical Météo-France cache.
 
 ## Time and leakage contract
 
@@ -232,7 +239,7 @@ cal_issue_time_cos
 
 They are calculated from the requested date and minute in `Europe/Paris`.
 
-## Proposed inference sequence
+## Inference sequence
 
 1. Freeze an issue timestamp in `Europe/Paris` and reject times outside the
    model's `06:30`–`19:59` scoring interval.
@@ -245,9 +252,8 @@ They are calculated from the requested date and minute in `Europe/Paris`.
 5. Enforce the 30-minute PiouPiou and 90-minute Météo-France freshness limits.
 6. Bind the row to the feature names stored in the model artifact and score it
    with the existing prediction pipeline.
-7. Record the issue time, latest source timestamps, missing raw fields, feature
-   row, model checksum, probability, and thresholded result for audit and later
-   validation.
+7. Print the issue time, source ages, model checksum, probability, and
+   thresholded result.
 
 No observations need to be persisted to make one prediction, but retaining the
 raw responses and produced feature rows is valuable for reproducibility and
@@ -291,14 +297,8 @@ period in advance. Do not tune transformations or thresholds against the
 existing held-out 2024–2025 results, and do not rewrite those reported results
 without a reproducible run.
 
-## Remaining implementation work
+## Remaining work
 
-- Add an OpenWindMap archive fetcher for station 2176.
-- Add OAuth2-backed Météo-France hourly-package acquisition for department 73.
-- Normalize the real-time schema and units into the existing observation
-  objects.
-- Expose a command that prepares and scores the current timestamp without
-  requiring monthly files or the historical weather cache.
-- Add one focused fixture-based test for raw-field mapping and unit conversion,
-  plus one cutoff/freshness regression test.
-- Shadow the path and complete the station-field and sensor-shift checks above.
+- Automate renewal of the temporary Météo-France bearer token if this becomes
+  a scheduled process.
+- Shadow the path and complete the sensor-shift checks above.
