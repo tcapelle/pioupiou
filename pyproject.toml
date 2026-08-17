@@ -1,5 +1,5 @@
 [project]
-name = "pioupiou-traverse"
+name = "pioupiou"
 version = "0.1.0"
 description = "Research model for predicting afternoon Traverse wind at noon"
 readme = "README.md"
