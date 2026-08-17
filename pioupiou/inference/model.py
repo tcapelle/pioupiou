@@ -40,13 +40,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 
-FEATURE_PREFIXES = {
-    "baseline": ("cal_",),
-    "variant": ("cal_", "piou_", "mf_"),
-    "spatial": ("cal_", "piou_", "mf_", "mfs_"),
-    "nwp": ("cal_", "piou_", "mf_", "nwp_"),
-    "same_day": ("cal_", "piou_", "mf_", "lag_"),
-}
+FEATURE_PREFIXES = ("cal_", "piou_", "mf_")
 RANDOM_STATE = 20260807
 
 
@@ -61,10 +55,6 @@ def sha256_file(path: Path | str) -> str:
 def sha256_json(value: object) -> str:
     canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def average_precision(y_true: np.ndarray, scores: np.ndarray) -> float:
-    return float(average_precision_score(np.asarray(y_true, dtype=int), scores))
 
 
 def classification_metrics(
@@ -210,18 +200,15 @@ def predict_probabilities(
     return probability
 
 
-def feature_names_for_role(frame: pd.DataFrame, role: str) -> list[str]:
-    if role not in FEATURE_PREFIXES:
-        raise ValueError(f"Unknown role {role!r}; expected one of {sorted(FEATURE_PREFIXES)}")
-    prefixes = FEATURE_PREFIXES[role]
+def feature_names(frame: pd.DataFrame) -> list[str]:
     names = sorted(
         column
         for column in frame.columns
-        if column.startswith(prefixes)
+        if column.startswith(FEATURE_PREFIXES)
         and pd.to_numeric(frame[column], errors="coerce").notna().any()
     )
     if not names:
-        raise ValueError(f"No feature columns found for {role!r} with prefixes {prefixes}")
+        raise ValueError(f"No feature columns found with prefixes {FEATURE_PREFIXES}")
     return names
 
 
@@ -261,7 +248,7 @@ def expanding_year_l2_search(
     return max(finite)[2], scores
 
 
-def load_daily_dataset(path: Path | str) -> pd.DataFrame:
+def load_dataset(path: Path | str) -> pd.DataFrame:
     frame = pd.read_csv(path)
     required = {"date", "year", "label"}
     missing = required.difference(frame.columns)
@@ -312,26 +299,30 @@ def split_dataset(
 
 def train_and_evaluate(
     frame: pd.DataFrame,
-    role: str,
     l2_candidates: Sequence[float] = (0.01, 0.1, 1.0, 10.0),
     smoke: bool = False,
     label_config: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, dict[str, float]]]:
     train, validation, test = split_dataset(frame, smoke=smoke)
-    feature_names = feature_names_for_role(train, role)
+    selected_features = feature_names(train)
     candidates = (1.0,) if smoke else l2_candidates
-    best_l2, cv_scores = expanding_year_l2_search(train, feature_names, candidates)
-    pipeline = build_pipeline(best_l2, feature_names)
+    best_l2, cv_scores = expanding_year_l2_search(
+        train, selected_features, candidates
+    )
+    pipeline = build_pipeline(best_l2, selected_features)
     fit_pipeline(
         pipeline,
-        numeric_feature_frame(train, feature_names), train["label"].to_numpy(dtype=int)
+        numeric_feature_frame(train, selected_features),
+        train["label"].to_numpy(dtype=int),
     )
-    validation_probability = predict_probabilities(pipeline, validation, feature_names)
+    validation_probability = predict_probabilities(
+        pipeline, validation, selected_features
+    )
     threshold = select_threshold(validation["label"].to_numpy(), validation_probability)
     metrics = {
         split_name: classification_metrics(
             subset["label"].to_numpy(dtype=int),
-            predict_probabilities(pipeline, subset, feature_names),
+            predict_probabilities(pipeline, subset, selected_features),
             threshold,
         )
         for split_name, subset in (
@@ -344,7 +335,7 @@ def train_and_evaluate(
         subset = test[test["year"] == year]
         metrics[f"test_{int(year)}"] = classification_metrics(
             subset["label"].to_numpy(dtype=int),
-            predict_probabilities(pipeline, subset, feature_names),
+            predict_probabilities(pipeline, subset, selected_features),
             threshold,
         )
     if "issue_minutes" in test.columns:
@@ -353,16 +344,14 @@ def train_and_evaluate(
             hour, minute = divmod(int(issue_minutes), 60)
             metrics[f"test_time_{hour:02d}{minute:02d}"] = classification_metrics(
                 subset["label"].to_numpy(dtype=int),
-                predict_probabilities(pipeline, subset, feature_names),
+                predict_probabilities(pipeline, subset, selected_features),
                 threshold,
             )
     classifier = pipeline.named_steps["classifier"]
     metadata = {
         "schema_version": 2,
         "artifact_format": "joblib",
-        "role": role,
-        "feature_prefixes": list(FEATURE_PREFIXES[role]),
-        "feature_names": feature_names,
+        "feature_names": selected_features,
         "estimator": {
             "library": "scikit-learn",
             "library_version": sklearn.__version__,
@@ -468,81 +457,61 @@ def predict_loaded(
     payload: dict[str, Any], pipeline: Pipeline, frame: pd.DataFrame
 ) -> tuple[np.ndarray, np.ndarray, list[list[tuple[str, float]]]]:
     feature_names = list(payload["feature_names"])
-    if payload["role"] in {
-        "variant",
-        "spatial",
-        "nwp",
-        "same_day",
-    }:
-        guard_columns = {
+    guard_columns = {
+        "piou_observation_count_morning",
+        "piou_last_age_minutes",
+        "mf_core_observation_count_morning",
+        "mf_last_age_minutes",
+    }
+    artifact_missing = sorted(guard_columns.difference(feature_names))
+    if artifact_missing:
+        raise ValueError(f"invalid_model: missing feed guard features {artifact_missing}")
+    row_missing = sorted(guard_columns.difference(frame.columns))
+    if row_missing:
+        raise ValueError(f"insufficient_data: missing required feed columns {row_missing}")
+    feed_guards = [
+        (
+            "piou_",
             "piou_observation_count_morning",
             "piou_last_age_minutes",
+            "maximum_feature_age_minutes",
+            30.0,
+        ),
+        (
+            "mf_",
             "mf_core_observation_count_morning",
             "mf_last_age_minutes",
-        }
-        if payload["role"] == "nwp":
-            guard_columns.update(
-                {"nwp_core_observation_count_morning", "nwp_last_age_minutes"}
-            )
-        artifact_missing = sorted(guard_columns.difference(feature_names))
-        if artifact_missing:
-            raise ValueError(f"invalid_model: missing feed guard features {artifact_missing}")
-        row_missing = sorted(guard_columns.difference(frame.columns))
-        if row_missing:
-            raise ValueError(f"insufficient_data: missing required feed columns {row_missing}")
-        feed_guards = [
-            (
-                "piou_",
-                "piou_observation_count_morning",
-                "piou_last_age_minutes",
-                "maximum_feature_age_minutes",
-                30.0,
-            ),
-            (
-                "mf_",
-                "mf_core_observation_count_morning",
-                "mf_last_age_minutes",
-                "maximum_weather_feature_age_minutes",
-                90.0,
-            ),
+            "maximum_weather_feature_age_minutes",
+            90.0,
+        ),
+    ]
+    for prefix, count_name, age_name, maximum_age_key, default_maximum_age in feed_guards:
+        physical = [
+            name
+            for name in feature_names
+            if name.startswith(prefix)
+            and not name.endswith("_count_morning")
+            and not name.endswith("_age_minutes")
         ]
-        if payload["role"] == "nwp":
-            feed_guards.append(
-                (
-                    "nwp_",
-                    "nwp_core_observation_count_morning",
-                    "nwp_last_age_minutes",
-                    "maximum_weather_feature_age_minutes",
-                    90.0,
-                )
+        numeric = numeric_feature_frame(frame, physical)
+        missing_rows = ~np.isfinite(numeric.to_numpy(dtype=float)).any(axis=1)
+        counts = pd.to_numeric(frame[count_name], errors="coerce").to_numpy(dtype=float)
+        missing_rows |= ~np.isfinite(counts) | (counts <= 0)
+        if missing_rows.any():
+            raise ValueError(
+                f"insufficient_data: unavailable {prefix} feed for row positions "
+                f"{np.flatnonzero(missing_rows).tolist()}"
             )
-        for prefix, count_name, age_name, maximum_age_key, default_maximum_age in feed_guards:
-            physical = [
-                name
-                for name in feature_names
-                if name.startswith(prefix)
-                and not name.endswith("_count_morning")
-                and not name.endswith("_age_minutes")
-            ]
-            numeric = numeric_feature_frame(frame, physical)
-            missing_rows = ~np.isfinite(numeric.to_numpy(dtype=float)).any(axis=1)
-            counts = pd.to_numeric(frame[count_name], errors="coerce").to_numpy(dtype=float)
-            missing_rows |= ~np.isfinite(counts) | (counts <= 0)
-            if missing_rows.any():
-                raise ValueError(
-                    f"insufficient_data: unavailable {prefix} feed for row positions "
-                    f"{np.flatnonzero(missing_rows).tolist()}"
-                )
-            ages = pd.to_numeric(frame[age_name], errors="coerce").to_numpy(dtype=float)
-            maximum_age = float(
-                payload.get("label", {}).get(maximum_age_key, default_maximum_age)
+        ages = pd.to_numeric(frame[age_name], errors="coerce").to_numpy(dtype=float)
+        maximum_age = float(
+            payload.get("label", {}).get(maximum_age_key, default_maximum_age)
+        )
+        stale = ~np.isfinite(ages) | (ages < 0) | (ages > maximum_age)
+        if stale.any():
+            raise ValueError(
+                f"insufficient_data: stale {prefix} feed for row positions "
+                f"{np.flatnonzero(stale).tolist()}"
             )
-            stale = ~np.isfinite(ages) | (ages < 0) | (ages > maximum_age)
-            if stale.any():
-                raise ValueError(
-                    f"insufficient_data: stale {prefix} feed for row positions "
-                    f"{np.flatnonzero(stale).tolist()}"
-                )
     numeric = numeric_feature_frame(frame, feature_names)
     probability = predict_probabilities(pipeline, numeric, feature_names)
     threshold = float(payload["model"]["threshold"])

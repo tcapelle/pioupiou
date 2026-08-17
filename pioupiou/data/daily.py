@@ -1,13 +1,7 @@
-"""Build one leakage-free noon-prediction row per local day.
-
-PiouPiou wind observations provide both the morning predictors and the Traverse
-label. Official hourly Meteo-France observations provide a compact spatial view
-of the air mass around Lac du Bourget.
-"""
+"""Observation parsing and feature engineering for the same-day model."""
 
 from __future__ import annotations
 
-import argparse
 import csv
 import gzip
 import hashlib
@@ -16,11 +10,9 @@ import json
 import math
 import re
 import sys
-import urllib.parse
 import urllib.request
-from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -28,22 +20,8 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
-from pioupiou.feature_eng.open_meteo import (
-    OPEN_METEO_LATITUDE,
-    OPEN_METEO_LONGITUDE,
-    OPEN_METEO_MODEL,
-    OPEN_METEO_SOURCE_SCHEMA,
-    OPEN_METEO_VARIABLES,
-    load_open_meteo_years,
-)
-
-
 DATA_GOUV_DATASET_ID = "6569b4473bedf2e7abad3b72"
 DATA_GOUV_API = f"https://www.data.gouv.fr/api/1/datasets/{DATA_GOUV_DATASET_ID}/"
-PIOU_ARCHIVE_API = "https://api.pioupiou.fr/v1/archive"
-PIOU_SOURCE_SCHEMA = "pioupiou-archive-v2-kmh-location-guard"
-METEO_FRANCE_SOURCE_SCHEMA = "meteofrance-base-hourly-v2-location-guard"
-PIOU_STATION_ID = 456
 PIOU_LATITUDE = 45.701731
 PIOU_LONGITUDE = 5.883505
 PIOU_MAX_LOCATION_DISTANCE_KM = 1.0
@@ -92,73 +70,16 @@ class WeatherStation:
     latitude: float
     longitude: float
     elevation_m: int
-    role: str
 
 
-WEATHER_STATIONS = (
-    WeatherStation(
-        "airport",
-        "73329001",
-        "73",
-        "CHAMBERY-AIX",
-        45.641333,
-        5.877833,
-        235,
-        "lake south / airport control",
-    ),
-    WeatherStation(
-        "mont_du_chat",
-        "73051001",
-        "73",
-        "MONT DU CHAT",
-        45.660500,
-        5.821500,
-        1496,
-        "west ridge",
-    ),
-    WeatherStation(
-        "belley",
-        "01034004",
-        "01",
-        "BELLEY",
-        45.769333,
-        5.688000,
-        330,
-        "west lowland",
-    ),
-    WeatherStation(
-        "meythet",
-        "74182001",
-        "74",
-        "MEYTHET",
-        45.928167,
-        6.094000,
-        455,
-        "north synoptic",
-    ),
-    WeatherStation(
-        "montmelian",
-        "73171002",
-        "73",
-        "MONTMELIAN",
-        45.493833,
-        6.049167,
-        264,
-        "south valley",
-    ),
-)
-PRIMARY_WEATHER_STATION = WEATHER_STATIONS[0]
-SPATIAL_STATION_SUFFIXES = (
-    "core_observation_count_morning",
-    "last_age_minutes",
-    "temperature_c_latest",
-    "temperature_c_delta_morning",
-    "dewpoint_c_latest",
-    "relative_humidity_pct_latest",
-    "wind_speed_10m_ms_latest",
-    "wind_direction_latest_sin",
-    "wind_direction_latest_cos",
-    "west_component_mean_ms",
+PRIMARY_WEATHER_STATION = WeatherStation(
+    "airport",
+    "73329001",
+    "73",
+    "CHAMBERY-AIX",
+    45.641333,
+    5.877833,
+    235,
 )
 
 
@@ -375,30 +296,6 @@ def piou_observations_from_archive_payload(
         )
     observations.sort(key=lambda item: item.timestamp_utc)
     return observations
-
-
-def fetch_piou_morning(
-    local_day: date, config: LabelConfig, station_id: int = 456
-) -> list[PiouObservation]:
-    """Fetch the local morning window from the public PiouPiou archive API."""
-    local_timezone = ZoneInfo(config.timezone_name)
-    start = local_boundary(local_day, config.piou_morning_start_hour, local_timezone)
-    stop = local_boundary(local_day, config.cutoff_hour, local_timezone)
-    query = urllib.parse.urlencode(
-        {
-            "start": start.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "stop": stop.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "format": "json",
-        }
-    )
-    with open_url(f"{PIOU_ARCHIVE_API}/{station_id}?{query}", timeout=60) as response:
-        payload = json.load(response)
-    observations = deduplicate_piou_observations(
-        piou_observations_from_archive_payload(payload, local_timezone)
-    )
-    start_utc = start.astimezone(timezone.utc)
-    stop_utc = stop.astimezone(timezone.utc)
-    return [item for item in observations if start_utc <= item.timestamp_utc < stop_utc]
 
 
 def monthly_files(input_dir: Path) -> list[Path]:
@@ -712,43 +609,6 @@ def calendar_features(local_day: date) -> dict[str, float | int | str]:
     }
 
 
-def build_piou_days(
-    input_dir: Path, config: LabelConfig
-) -> tuple[dict[date, dict[str, Any]], dict[str, int]]:
-    timezone_local = ZoneInfo(config.timezone_name)
-    iterator, counters = iter_unique_piou(input_dir, timezone_local)
-    rows: dict[date, dict[str, Any]] = {}
-    counters.update(
-        {
-            "candidate_days": 0,
-            "insufficient_target_coverage_days": 0,
-            "stale_or_missing_noon_feature_days": 0,
-            "usable_days": 0,
-            "positive_days": 0,
-        }
-    )
-    for local_day, observations in group_piou_by_local_day(iterator):
-        counters["candidate_days"] += 1
-        label_values = target_label(local_day, observations, config)
-        if label_values is None:
-            counters["insufficient_target_coverage_days"] += 1
-            continue
-        features = piou_features(local_day, observations, config)
-        if features is None:
-            counters["stale_or_missing_noon_feature_days"] += 1
-            continue
-        row: dict[str, Any] = {
-            **calendar_features(local_day),
-            "label": label_values["label"],
-            **label_values,
-            **features,
-        }
-        rows[local_day] = row
-        counters["usable_days"] += 1
-        counters["positive_days"] += int(row["label"])
-    return rows, counters
-
-
 def resource_from_payload(payload: dict[str, Any]) -> WeatherResource | None:
     title = str(payload.get("title") or "")
     match = RESOURCE_PERIOD.search(title)
@@ -1056,144 +916,6 @@ def weather_features(
     return output
 
 
-def build_weather_days(
-    paths: Sequence[Path],
-    config: LabelConfig,
-    start_year: int,
-    end_year: int,
-    station: WeatherStation | None = None,
-) -> dict[date, dict[str, float]]:
-    timezone_local = ZoneInfo(config.timezone_name)
-    grouped: dict[date, list[dict[str, Any]]] = defaultdict(list)
-    seen: dict[datetime, dict[str, Any]] = {}
-    for observation in iter_cached_weather(paths, timezone_local, station):
-        local_timestamp = observation["timestamp_local"]
-        if not start_year <= local_timestamp.year <= end_year:
-            continue
-        if config.weather_morning_start_hour <= local_timestamp.hour < config.cutoff_hour:
-            timestamp_utc = observation["timestamp_utc"]
-            previous = seen.get(timestamp_utc)
-            if previous is not None:
-                conflicts = [
-                    field
-                    for field in WEATHER_RAW_FIELDS
-                    if not (
-                        (np.isnan(previous[field]) and np.isnan(observation[field]))
-                        or previous[field] == observation[field]
-                    )
-                ]
-                if conflicts:
-                    raise ValueError(
-                        f"Conflicting Meteo-France rows at {timestamp_utc.isoformat()}: "
-                        f"{conflicts}"
-                    )
-                continue
-            seen[timestamp_utc] = observation
-            grouped[local_timestamp.date()].append(observation)
-    return {
-        local_day: weather_features(
-            sorted(values, key=lambda item: item["timestamp_local"]),
-            cutoff=local_boundary(local_day, config.cutoff_hour, timezone_local),
-            maximum_age_minutes=config.maximum_weather_feature_age_minutes,
-        )
-        for local_day, values in grouped.items()
-    }
-
-
-def compact_station_features(
-    station: WeatherStation,
-    weather: dict[str, float] | None,
-    maximum_age_minutes: float,
-) -> dict[str, float]:
-    """Keep a small, consistent feature block for one optional station."""
-    prefix = f"mfs_{station.slug}_"
-    weather = weather or {}
-    age = float(weather.get("mf_last_age_minutes", float("nan")))
-    fresh = np.isfinite(age) and 0.0 <= age <= maximum_age_minutes
-    output: dict[str, float] = {}
-    for suffix in SPATIAL_STATION_SUFFIXES:
-        value = float(weather.get(f"mf_{suffix}", float("nan")))
-        if suffix == "core_observation_count_morning":
-            value = value if np.isfinite(value) else 0.0
-        elif suffix != "last_age_minutes" and not fresh:
-            value = float("nan")
-        output[f"{prefix}{suffix}"] = value
-    if station.slug == "meythet":
-        pressure = float(weather.get("mf_pressure_msl_hpa_latest", float("nan")))
-        output[f"{prefix}pressure_msl_hpa_latest"] = (
-            pressure if fresh else float("nan")
-        )
-    return output
-
-
-def spatial_weather_features(
-    optional_weather: dict[str, dict[str, float] | None],
-    maximum_age_minutes: float,
-) -> dict[str, float]:
-    """Create the compact optional-station feature block."""
-    output: dict[str, float] = {}
-    for station in WEATHER_STATIONS[1:]:
-        output.update(
-            compact_station_features(
-                station,
-                optional_weather.get(station.slug),
-                maximum_age_minutes,
-            )
-        )
-    return output
-
-
-def load_station_weather(
-    cache_dir: Path,
-    config: LabelConfig,
-    start_year: int,
-    end_year: int,
-    refresh: bool,
-    offline: bool,
-    stations: Sequence[WeatherStation] = WEATHER_STATIONS,
-) -> tuple[
-    dict[str, dict[date, dict[str, float]]],
-    list[WeatherResource],
-    dict[str, dict[str, int]],
-    dict[str, str],
-]:
-    """Load daily weather features while downloading each archive only once."""
-    departments = tuple(sorted({station.department for station in stations}))
-    resources = discover_weather_resources(
-        cache_dir, start_year, end_year, offline, departments=departments
-    )
-    paths = {station.slug: [] for station in stations}
-    resource_rows: dict[str, dict[str, int]] = {}
-    cache_sha256: dict[str, str] = {}
-    for resource in resources:
-        resource_stations = [
-            station for station in stations if station.department == resource.department
-        ]
-        path, counts = cache_weather_resource(
-            cache_dir,
-            resource,
-            [station.station_id for station in resource_stations],
-            refresh,
-            offline,
-        )
-        resource_rows[resource.resource_id] = counts
-        cache_sha256[resource.resource_id] = sha256_file(path)
-        for station in resource_stations:
-            if counts[station.station_id] > 0:
-                paths[station.slug].append(path)
-    daily = {
-        station.slug: build_weather_days(
-            paths[station.slug],
-            config,
-            start_year,
-            end_year,
-            station=station,
-        )
-        for station in stations
-    }
-    return daily, resources, resource_rows, cache_sha256
-
-
 def write_dataset(rows: Sequence[dict[str, Any]], output: Path) -> list[str]:
     output.parent.mkdir(parents=True, exist_ok=True)
     leading = [
@@ -1229,247 +951,3 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-dir", type=Path, default=Path("pioudata"))
-    parser.add_argument("--output", type=Path, default=Path("artifacts/traverse_daily.csv"))
-    parser.add_argument(
-        "--metadata-output", type=Path, default=Path("artifacts/traverse_daily.metadata.json")
-    )
-    parser.add_argument("--cache-dir", type=Path, default=Path("pioudata/.weather_cache"))
-    parser.add_argument("--timezone", default="Europe/Paris")
-    parser.add_argument("--cutoff-hour", type=int, default=12)
-    parser.add_argument("--target-end-hour", type=int, default=20)
-    parser.add_argument("--speed-threshold-kmh", type=float, default=18.52)
-    parser.add_argument("--heading-min-degrees", type=float, default=225.0)
-    parser.add_argument("--heading-max-degrees", type=float, default=315.0)
-    parser.add_argument("--minimum-cumulative-minutes", type=float, default=30.0)
-    parser.add_argument("--minimum-consecutive-samples", type=int, default=3)
-    parser.add_argument("--maximum-consecutive-gap-minutes", type=float, default=10.0)
-    parser.add_argument("--sample-hold-cap-minutes", type=float, default=5.0)
-    parser.add_argument("--minimum-target-coverage", type=float, default=0.75)
-    parser.add_argument("--piou-morning-start-hour", type=int, default=8)
-    parser.add_argument("--maximum-feature-age-minutes", type=float, default=30.0)
-    parser.add_argument("--weather-morning-start-hour", type=int, default=6)
-    parser.add_argument("--maximum-weather-feature-age-minutes", type=float, default=90.0)
-    parser.add_argument("--refresh-weather", action="store_true")
-    parser.add_argument("--refresh-open-meteo", action="store_true")
-    parser.add_argument(
-        "--skip-open-meteo",
-        action="store_true",
-        help="Build the legacy dataset without ECMWF/Open-Meteo feature columns",
-    )
-    parser.add_argument("--offline", action="store_true")
-    return parser
-
-
-def main() -> int:
-    args = build_parser().parse_args()
-    config = LabelConfig(
-        timezone_name=args.timezone,
-        cutoff_hour=args.cutoff_hour,
-        target_end_hour=args.target_end_hour,
-        speed_threshold_kmh=args.speed_threshold_kmh,
-        heading_min_degrees=args.heading_min_degrees,
-        heading_max_degrees=args.heading_max_degrees,
-        minimum_cumulative_minutes=args.minimum_cumulative_minutes,
-        minimum_consecutive_samples=args.minimum_consecutive_samples,
-        maximum_consecutive_gap_minutes=args.maximum_consecutive_gap_minutes,
-        sample_hold_cap_minutes=args.sample_hold_cap_minutes,
-        minimum_target_coverage=args.minimum_target_coverage,
-        piou_morning_start_hour=args.piou_morning_start_hour,
-        maximum_feature_age_minutes=args.maximum_feature_age_minutes,
-        weather_morning_start_hour=args.weather_morning_start_hour,
-        maximum_weather_feature_age_minutes=args.maximum_weather_feature_age_minutes,
-    )
-    try:
-        validate_label_config(config)
-    except ValueError as error:
-        raise SystemExit(str(error)) from error
-    piou_days, counters = build_piou_days(args.input_dir, config)
-    if not piou_days:
-        raise SystemExit("No usable PiouPiou days were produced")
-    start_year = min(item.year for item in piou_days)
-    end_year = max(item.year for item in piou_days)
-    weather_days, resources, cache_counts, cache_sha256 = load_station_weather(
-        args.cache_dir,
-        config,
-        start_year,
-        end_year,
-        args.refresh_weather,
-        args.offline,
-    )
-    open_meteo_days: dict[date, dict[str, float]] = {}
-    open_meteo_provenance: list[dict[str, str]] = []
-    if not args.skip_open_meteo:
-        try:
-            open_meteo_days, open_meteo_provenance = load_open_meteo_years(
-                args.cache_dir,
-                start_year,
-                end_year,
-                config.timezone_name,
-                config.weather_morning_start_hour,
-                config.cutoff_hour,
-                refresh=args.refresh_open_meteo,
-                offline=args.offline,
-            )
-        except (FileNotFoundError, ValueError) as error:
-            raise SystemExit(str(error)) from error
-    rows: list[dict[str, Any]] = []
-    days_without_weather = 0
-    days_with_stale_weather = 0
-    airport_distance_km = round(
-        distance_km(
-            PIOU_LATITUDE,
-            PIOU_LONGITUDE,
-            PRIMARY_WEATHER_STATION.latitude,
-            PRIMARY_WEATHER_STATION.longitude,
-        ),
-        2,
-    )
-    for local_day, row in sorted(piou_days.items()):
-        airport = weather_days[PRIMARY_WEATHER_STATION.slug].get(local_day)
-        if airport is None:
-            days_without_weather += 1
-            continue
-        weather_age = airport.get("mf_last_age_minutes", float("nan"))
-        if not np.isfinite(weather_age) or (
-            weather_age > config.maximum_weather_feature_age_minutes
-        ):
-            days_with_stale_weather += 1
-            continue
-        optional_weather = {
-            station.slug: weather_days[station.slug].get(local_day)
-            for station in WEATHER_STATIONS[1:]
-        }
-        rows.append(
-            {
-                **row,
-                **airport,
-                **open_meteo_days.get(local_day, {}),
-                **spatial_weather_features(
-                    optional_weather,
-                    config.maximum_weather_feature_age_minutes,
-                ),
-                "meta_weather_station_id": PRIMARY_WEATHER_STATION.station_id,
-                "meta_weather_station_distance_km": airport_distance_km,
-            }
-        )
-    fields = write_dataset(rows, args.output)
-    station_coverage: dict[str, dict[str, Any]] = {}
-    for station in WEATHER_STATIONS[1:]:
-        feature = f"mfs_{station.slug}_temperature_c_latest"
-        by_year: dict[str, dict[str, float | int]] = {}
-        for year in sorted({int(row["year"]) for row in rows}):
-            year_rows = [row for row in rows if int(row["year"]) == year]
-            available = sum(int(np.isfinite(row[feature])) for row in year_rows)
-            by_year[str(year)] = {
-                "available_days": available,
-                "total_days": len(year_rows),
-                "fraction": available / len(year_rows),
-            }
-        available = sum(int(np.isfinite(row[feature])) for row in rows)
-        station_coverage[station.slug] = {
-            "available_days": available,
-            "total_days": len(rows),
-            "fraction": available / len(rows),
-            "by_year": by_year,
-        }
-    open_meteo_available_days = sum(
-        int(row.get("nwp_core_observation_count_morning", 0.0) > 0)
-        for row in rows
-    )
-    metadata = {
-        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "output": str(args.output),
-        "output_sha256": sha256_file(args.output),
-        "row_count": len(rows),
-        "columns": fields,
-        "date_range": [rows[0]["date"], rows[-1]["date"]],
-        "label_config": asdict(config),
-        "pioupiou": {
-            "input_dir": str(args.input_dir),
-            "station_id": PIOU_STATION_ID,
-            "source_schema": PIOU_SOURCE_SCHEMA,
-            "expected_coordinates": [PIOU_LATITUDE, PIOU_LONGITUDE],
-            "maximum_location_distance_km": PIOU_MAX_LOCATION_DISTANCE_KM,
-            "location_policy": (
-                "missing or off-site coordinates are rejected before labels and features"
-            ),
-            "license_url": "http://developers.pioupiou.fr/data-licensing",
-            "attribution": "(c) contributors of the OpenWindMap wind network",
-            "counters": counters,
-        },
-        "meteofrance": {
-            "dataset_id": DATA_GOUV_DATASET_ID,
-            "dataset_api_url": DATA_GOUV_API,
-            "station_id": PRIMARY_WEATHER_STATION.station_id,
-            "station_name": PRIMARY_WEATHER_STATION.name,
-            "source_schema": METEO_FRANCE_SOURCE_SCHEMA,
-            "station_coordinates": [
-                PRIMARY_WEATHER_STATION.latitude,
-                PRIMARY_WEATHER_STATION.longitude,
-            ],
-            "station_elevation_m": PRIMARY_WEATHER_STATION.elevation_m,
-            "maximum_location_distance_km": WEATHER_MAX_LOCATION_DISTANCE_KM,
-            "location_policy": (
-                "observations with missing or off-site coordinates are rejected"
-            ),
-            "station_manifest": [asdict(station) for station in WEATHER_STATIONS],
-            "license": "Licence Ouverte 2.0",
-            "resource_rows": cache_counts,
-            "resource_cache_sha256": cache_sha256,
-            "resources": [asdict(item) for item in resources],
-            "station_temperature_coverage": station_coverage,
-            "quality_policy": (
-                "empty values and quality code 2 are missing; "
-                "codes 0, 1, and 9 are accepted"
-            ),
-            "days_without_weather": days_without_weather,
-            "days_with_stale_weather": days_with_stale_weather,
-            "feature_window": (
-                f"[{config.weather_morning_start_hour:02d}:00,"
-                f"{config.cutoff_hour:02d}:00) Europe/Paris"
-            ),
-        },
-        "open_meteo": {
-            "enabled": not args.skip_open_meteo,
-            "source_schema": OPEN_METEO_SOURCE_SCHEMA,
-            "model": OPEN_METEO_MODEL,
-            "requested_coordinates": [OPEN_METEO_LATITUDE, OPEN_METEO_LONGITUDE],
-            "variables": list(OPEN_METEO_VARIABLES),
-            "feature_policy": (
-                "hourly model values with local valid times in the configured morning "
-                "window; afternoon model values are excluded"
-            ),
-            "cache": open_meteo_provenance,
-            "available_days": open_meteo_available_days,
-            "total_days": len(rows),
-            "fraction": open_meteo_available_days / len(rows),
-        },
-    }
-    args.metadata_output.parent.mkdir(parents=True, exist_ok=True)
-    args.metadata_output.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
-    positive_rows = sum(int(row["label"]) for row in rows)
-    print(
-        json.dumps(
-            {
-                "output": str(args.output),
-                "metadata": str(args.metadata_output),
-                "rows": len(rows),
-                "positives": positive_rows,
-                "positive_rate": positive_rows / len(rows),
-                "days_without_weather": days_without_weather,
-                "days_with_stale_weather": days_with_stale_weather,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

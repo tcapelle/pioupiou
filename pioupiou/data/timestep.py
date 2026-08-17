@@ -6,7 +6,7 @@ import argparse
 import json
 import math
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Any, Sequence
 from zoneinfo import ZoneInfo
@@ -15,7 +15,6 @@ import numpy as np
 
 from pioupiou.data.daily import (
     PRIMARY_WEATHER_STATION,
-    WEATHER_STATIONS,
     LabelConfig,
     PiouObservation,
     cache_weather_resource,
@@ -65,50 +64,6 @@ def issue_time_features(issue_minutes: int) -> dict[str, float]:
         "cal_issue_time_sin": math.sin(angle),
         "cal_issue_time_cos": math.cos(angle),
     }
-
-
-def historical_traverse_features(
-    local_day: date, previous_labels: dict[date, int]
-) -> dict[str, float]:
-    """Summarize Traverse outcomes from dates before ``local_day``."""
-    output: dict[str, float] = {}
-    yesterday = previous_labels.get(local_day - timedelta(days=1))
-    output["lag_traverse_1d"] = (
-        float(yesterday) if yesterday is not None else float("nan")
-    )
-    for days in (3, 7, 14):
-        values = [
-            previous_labels[candidate]
-            for offset in range(1, days + 1)
-            if (candidate := local_day - timedelta(days=offset)) in previous_labels
-        ]
-        output[f"lag_traverse_rate_{days}d"] = (
-            float(np.mean(values)) if values else float("nan")
-        )
-        output[f"lag_known_days_{days}d"] = float(len(values))
-
-    positive_dates = [day for day, label in previous_labels.items() if label == 1]
-    output["lag_days_since_traverse"] = (
-        float((local_day - max(positive_dates)).days)
-        if positive_dates
-        else float("nan")
-    )
-    day_of_year = local_day.timetuple().tm_yday
-    similar = [
-        label
-        for day, label in previous_labels.items()
-        if day.year < local_day.year
-        and min(
-            abs(day.timetuple().tm_yday - day_of_year),
-            366 - abs(day.timetuple().tm_yday - day_of_year),
-        )
-        <= 14
-    ]
-    output["lag_similar_doy_traverse_rate"] = (
-        float(np.mean(similar)) if similar else float("nan")
-    )
-    output["lag_similar_doy_known_days"] = float(len(similar))
-    return output
 
 
 def traverse_progress_features(
@@ -182,12 +137,10 @@ def build_timestep_piou_rows(
     timezone_local = ZoneInfo(config.timezone_name)
     iterator, _ = iter_unique_piou(input_dir, timezone_local)
     rows: list[dict[str, Any]] = []
-    previous_labels: dict[date, int] = {}
     for local_day, observations in group_piou_by_local_day(iterator):
         daily_target = target_label(local_day, observations, config)
         if daily_target is None:
             continue
-        history = historical_traverse_features(local_day, previous_labels)
         for issue_minutes in issue_minutes_grid:
             cutoff = cutoff_for_minutes(local_day, issue_minutes, timezone_local)
             features = piou_features(
@@ -200,7 +153,6 @@ def build_timestep_piou_rows(
                     **calendar_features(local_day),
                     "issue_minutes": issue_minutes,
                     **issue_time_features(issue_minutes),
-                    **history,
                     **features,
                     **traverse_progress_features(
                         local_day, observations, config, cutoff
@@ -208,7 +160,6 @@ def build_timestep_piou_rows(
                     **daily_target,
                 }
             )
-        previous_labels[local_day] = int(daily_target["label"])
     return rows
 
 
@@ -229,16 +180,11 @@ def build_primary_weather_timeline(
         departments=(PRIMARY_WEATHER_STATION.department,),
     )
     paths: list[Path] = []
-    department_stations = [
-        station
-        for station in WEATHER_STATIONS
-        if station.department == PRIMARY_WEATHER_STATION.department
-    ]
     for resource in resources:
         path, counts = cache_weather_resource(
             cache_dir,
             resource,
-            [station.station_id for station in department_stations],
+            [PRIMARY_WEATHER_STATION.station_id],
             refresh,
             offline,
         )
