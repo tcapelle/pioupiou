@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Build one leakage-free noon-prediction row per local day.
 
 PiouPiou wind observations provide both the morning predictors and the Traverse
@@ -29,7 +28,7 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
-from open_meteo_features import (
+from pioupiou.feature_eng.open_meteo import (
     OPEN_METEO_LATITUDE,
     OPEN_METEO_LONGITUDE,
     OPEN_METEO_MODEL,

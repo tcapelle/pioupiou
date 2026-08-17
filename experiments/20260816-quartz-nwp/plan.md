@@ -32,18 +32,18 @@ information into a noon forecast.
 ## Reproduction
 
 ```bash
-uv run python build_traverse_dataset.py
-uv run python train_traverse_model.py \
+uv run python -m scripts.build_dataset
+uv run python -m scripts.train \
   --dataset artifacts/traverse_daily.csv \
   --role variant \
   --wandb-name quartz-nwp-reference \
   --wandb-mode disabled
-uv run python train_traverse_model.py \
+uv run python -m scripts.train \
   --dataset artifacts/traverse_daily.csv \
   --role nwp \
   --wandb-name quartz-nwp-candidate \
   --wandb-mode disabled
-uv run python compare_traverse_models.py \
+uv run python -m scripts.evaluate \
   --reference artifacts/traverse_model_variant.joblib \
   --candidate artifacts/traverse_model_nwp.joblib \
   --output artifacts/traverse_comparison_nwp.json \

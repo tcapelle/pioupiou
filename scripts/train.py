@@ -18,20 +18,20 @@ import scipy
 import sklearn
 import threadpoolctl
 
-from build_traverse_dataset import (
+from pioupiou.data.daily import (
     METEO_FRANCE_SOURCE_SCHEMA,
     PIOU_SOURCE_SCHEMA,
     WEATHER_STATIONS,
     label_config_from_payload,
 )
-from open_meteo_features import (
+from pioupiou.feature_eng.open_meteo import (
     OPEN_METEO_LATITUDE,
     OPEN_METEO_LONGITUDE,
     OPEN_METEO_MODEL,
     OPEN_METEO_SOURCE_SCHEMA,
     OPEN_METEO_VARIABLES,
 )
-from traverse_model import (
+from pioupiou.inference.model import (
     load_daily_dataset,
     save_model_bundle,
     save_json,
@@ -42,15 +42,17 @@ from traverse_model import (
 
 
 PROVENANCE_FILES = (
-    "build_traverse_dataset.py",
-    "build_timestep_traverse_dataset.py",
-    "open_meteo_features.py",
-    "prepare_noon_features.py",
-    "prepare_timestep_features.py",
-    "traverse_model.py",
-    "train_traverse_model.py",
-    "predict_traverse.py",
-    "compare_traverse_models.py",
+    "pioupiou/data/daily.py",
+    "pioupiou/data/timestep.py",
+    "pioupiou/feature_eng/open_meteo.py",
+    "pioupiou/inference/model.py",
+    "scripts/build_dataset.py",
+    "scripts/build_timestep_dataset.py",
+    "scripts/prepare_noon.py",
+    "scripts/prepare_timestep.py",
+    "scripts/train.py",
+    "scripts/predict.py",
+    "scripts/evaluate.py",
     ".python-version",
     "pyproject.toml",
     "uv.lock",

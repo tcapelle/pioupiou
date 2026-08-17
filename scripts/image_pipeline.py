@@ -1,4 +1,4 @@
-"""Inventory, select, and download Grand Port webcam images."""
+"""Image pipeline for inventorying and downloading Grand Port webcam frames."""
 
 from __future__ import annotations
 

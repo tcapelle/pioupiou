@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from traverse_model import (
+from pioupiou.inference.model import (
     FEATURE_PREFIXES,
     average_precision,
     load_artifact,

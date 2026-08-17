@@ -2,11 +2,11 @@ import unittest
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from build_timestep_traverse_dataset import (
+from pioupiou.data.timestep import (
     cutoff_for_minutes,
     traverse_progress_features,
 )
-from build_traverse_dataset import LabelConfig, PiouObservation, piou_features
+from pioupiou.data.daily import LabelConfig, PiouObservation, piou_features
 
 
 LOCAL = ZoneInfo("Europe/Paris")

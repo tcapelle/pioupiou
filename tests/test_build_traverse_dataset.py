@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from build_traverse_dataset import (
+from pioupiou.data.daily import (
     LabelConfig,
     PRIMARY_WEATHER_STATION,
     PiouObservation,

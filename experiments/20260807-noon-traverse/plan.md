@@ -85,8 +85,8 @@ prefer a narrower direction sector or longer persistence requirement.
 Commands (validated before launch):
 
 ```text
-python3 train_traverse_model.py --dataset artifacts/traverse_daily.csv --role baseline --wandb-name exp-20260807-noon-traverse-baseline --wandb-tags exp/20260807-noon-traverse,baseline
-python3 train_traverse_model.py --dataset artifacts/traverse_daily.csv --role variant --wandb-name exp-20260807-noon-traverse-variant --wandb-tags exp/20260807-noon-traverse,variant
+uv run python -m scripts.train --dataset artifacts/traverse_daily.csv --role baseline --wandb-name exp-20260807-noon-traverse-baseline --wandb-tags exp/20260807-noon-traverse,baseline
+uv run python -m scripts.train --dataset artifacts/traverse_daily.csv --role variant --wandb-name exp-20260807-noon-traverse-variant --wandb-tags exp/20260807-noon-traverse,variant
 ```
 
 ## Smoke

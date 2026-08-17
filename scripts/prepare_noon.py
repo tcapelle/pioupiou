@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from build_traverse_dataset import (
+from pioupiou.data.daily import (
     METEO_FRANCE_SOURCE_SCHEMA,
     PIOU_SOURCE_SCHEMA,
     PRIMARY_WEATHER_STATION,
@@ -27,7 +27,7 @@ from build_traverse_dataset import (
     read_month,
     spatial_weather_features,
 )
-from open_meteo_features import (
+from pioupiou.feature_eng.open_meteo import (
     OPEN_METEO_LATITUDE,
     OPEN_METEO_LONGITUDE,
     OPEN_METEO_MODEL,
@@ -35,7 +35,7 @@ from open_meteo_features import (
     OPEN_METEO_VARIABLES,
     load_open_meteo_days,
 )
-from traverse_model import load_artifact_with_sha256, sha256_json
+from pioupiou.inference.model import load_artifact_with_sha256, sha256_json
 
 
 def local_piou_observations(input_dir: Path, local_day: date, timezone_name: str):

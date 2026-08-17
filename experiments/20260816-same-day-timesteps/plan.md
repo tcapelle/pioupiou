@@ -59,18 +59,18 @@ from the 30-minute training grid. Only observations before 13:17 were used; the
 model returned probability `0.21591`.
 
 ```bash
-uv run python build_timestep_traverse_dataset.py --offline
-uv run python train_traverse_model.py \
+uv run python -m scripts.build_timestep_dataset --offline
+uv run python -m scripts.train \
   --dataset artifacts/traverse_timestep.csv \
   --role same_day \
   --wandb-name exp-20260816-same-day-timesteps \
   --wandb-mode disabled
 
-uv run python prepare_timestep_features.py \
+uv run python -m scripts.prepare_timestep \
   --date 2025-07-21 --time 13:17 \
   --offline-weather \
   --output artifacts/timestep_features_2025-07-21_1317.csv
-uv run python predict_traverse.py \
+uv run python -m scripts.predict \
   --model artifacts/traverse_model_same_day.joblib \
   --features artifacts/timestep_features_2025-07-21_1317.csv
 ```

@@ -1,4 +1,4 @@
-"""Scikit-learn modeling utilities for the noon Traverse classifier."""
+"""Scikit-learn modeling and inference utilities for Traverse classifiers."""
 
 from __future__ import annotations
 
