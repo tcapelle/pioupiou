@@ -94,26 +94,20 @@ def meteofrance_observations(
     return [observations[key] for key in sorted(observations)]
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--model",
-        type=Path,
-        default=Path("artifacts/traverse_model.joblib"),
-    )
-    args = parser.parse_args()
-
+def predict_now(
+    model: Path = Path("artifacts/traverse_model.joblib"),
+) -> dict[str, Any]:
     token = os.environ.get("METEOFRANCE_TOKEN")
     if not token:
-        raise SystemExit("METEOFRANCE_TOKEN is not set")
+        raise ValueError("METEOFRANCE_TOKEN is not set")
 
-    payload, pipeline, model_sha256 = load_artifact_with_sha256(args.model)
+    payload, pipeline, model_sha256 = load_artifact_with_sha256(model)
     config = label_config_from_payload(payload["label"])
     local_timezone = ZoneInfo(config.timezone_name)
     cutoff = datetime.now(local_timezone).replace(second=0, microsecond=0)
     issue_minutes = cutoff.hour * 60 + cutoff.minute
     if not 6 * 60 + 30 <= issue_minutes < 20 * 60:
-        raise SystemExit("Current time is outside the model's 06:30-19:59 window")
+        raise ValueError("Current time is outside the model's 06:30-19:59 window")
 
     piou_payload = fetch_json(PIOU_URL)
     piou_observations = piou_observations_from_archive_payload(
@@ -123,7 +117,7 @@ def main() -> int:
         cutoff.date(), piou_observations, config, cutoff_local=cutoff
     )
     if piou is None:
-        raise SystemExit("insufficient_data: missing or stale Windbird observations")
+        raise ValueError("insufficient_data: missing or stale Windbird observations")
     piou_start = datetime.combine(
         cutoff.date(), time(config.piou_morning_start_hour), local_timezone
     )
@@ -136,7 +130,7 @@ def main() -> int:
     meteo_payload = fetch_json(METEO_URL, token)
     meteo_observations = meteofrance_observations(meteo_payload, cutoff)
     if not meteo_observations:
-        raise SystemExit("insufficient_data: no Météo-France observations")
+        raise ValueError("insufficient_data: no Météo-France observations")
     meteo = weather_features(
         meteo_observations,
         cutoff=cutoff,
@@ -155,28 +149,37 @@ def main() -> int:
     feature_names = list(payload["feature_names"])
     missing = sorted(set(feature_names).difference(prepared))
     if missing:
-        raise SystemExit(f"Cannot construct model features: {missing}")
+        raise ValueError(f"Cannot construct model features: {missing}")
     frame = pd.DataFrame([{name: prepared[name] for name in feature_names}])
     probability, predicted, _ = predict_loaded(payload, pipeline, frame)
 
-    print(
-        json.dumps(
-            {
-                "prediction_time": cutoff.isoformat(),
-                "model_sha256": model_sha256,
-                "piou_observation_time": piou_latest.isoformat(),
-                "piou_last_age_minutes": piou["piou_last_age_minutes"],
-                "mf_observation_time": meteo_observations[-1][
-                    "timestamp_local"
-                ].isoformat(),
-                "mf_last_age_minutes": meteo["mf_last_age_minutes"],
-                "traverse_probability": float(probability[0]),
-                "predict_traverse": bool(predicted[0]),
-            },
-            indent=2,
-            sort_keys=True,
-        )
+    return {
+        "prediction_time": cutoff.isoformat(),
+        "model_sha256": model_sha256,
+        "piou_observation_time": piou_latest.isoformat(),
+        "piou_last_age_minutes": piou["piou_last_age_minutes"],
+        "mf_observation_time": meteo_observations[-1][
+            "timestamp_local"
+        ].isoformat(),
+        "mf_last_age_minutes": meteo["mf_last_age_minutes"],
+        "traverse_probability": float(probability[0]),
+        "predict_traverse": bool(predicted[0]),
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--model",
+        type=Path,
+        default=Path("artifacts/traverse_model.joblib"),
     )
+    args = parser.parse_args()
+    try:
+        result = predict_now(args.model)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 

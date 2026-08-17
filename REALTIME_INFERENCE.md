@@ -21,6 +21,13 @@ uv run python realtime_inference.py \
   --model artifacts/traverse_model.joblib
 ```
 
+The same prediction is available over HTTP at `GET /predict`:
+
+```bash
+TRAVERSE_MODEL=artifacts/traverse_model.joblib \
+  uv run uvicorn api:app
+```
+
 `scripts.prepare_timestep` remains the retrospective path backed by monthly
 PiouPiou CSV files and the historical Météo-France cache.
 

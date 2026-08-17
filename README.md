@@ -71,6 +71,14 @@ The JSON response includes the probability, thresholded decision, and largest
 signed contributions to the model logit. Contributions describe this model;
 they are not causal explanations.
 
+With `METEOFRANCE_TOKEN` set, serve the current live prediction at
+`GET /predict`:
+
+```bash
+TRAVERSE_MODEL=artifacts/traverse_model.joblib \
+  uv run uvicorn api:app
+```
+
 `joblib` uses pickle semantics. Load only trusted model bundles. A downloaded
 artifact can be checked before deserialization with `--model-sha256`.
 
