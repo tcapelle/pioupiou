@@ -74,6 +74,28 @@ they are not causal explanations.
 `joblib` uses pickle semantics. Load only trusted model bundles. A downloaded
 artifact can be checked before deserialization with `--model-sha256`.
 
+## Future webcam experiments
+
+The standalone Grand Port webcam pipeline is retained for future image-model
+research. It inventories timestamped frames, creates a reviewable selection,
+and downloads only that frozen selection; it is not part of the current model.
+
+```bash
+uv run python -m scripts.image_pipeline inventory \
+  --start-date 2024-01-01 --end-date 2025-08-15
+
+uv run python -m scripts.image_pipeline plan \
+  --start-date 2024-01-01 --end-date 2025-08-15 \
+  --from-time 08:00 --until-time 12:00 \
+  --stride 2 --quality mini
+
+uv run python -m scripts.image_pipeline download
+```
+
+Inventory metadata, selections, and downloaded images remain ignored under
+`artifacts/webcam_grandport/`. Confirm bulk collection and machine-learning
+rights with the image rightsholders before downloading a corpus.
+
 ## Data and label
 
 PiouPiou observations with missing coordinates or coordinates more than 1 km
