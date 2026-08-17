@@ -79,6 +79,14 @@ TRAVERSE_MODEL=artifacts/traverse_model.joblib \
   uv run uvicorn api:app
 ```
 
+The same server exposes a historical dashboard at
+`http://127.0.0.1:8000/dashboard`. It shows wind-rule Traverse candidates by
+year and a shared 06:30–20:00 timeline with wind in knots, flow-direction
+needles, model probability, CHAMBERY-AIX temperature, and either cloud cover or
+solar radiation when cloud cover is unavailable. Rule matches are candidates,
+not independently confirmed Traverse observations. Dashboard data is built
+from the local archives on first load and then cached in memory.
+
 `joblib` uses pickle semantics. Load only trusted model bundles. A downloaded
 artifact can be checked before deserialization with `--model-sha256`.
 
@@ -105,6 +113,27 @@ Inventory metadata, selections, and downloaded images remain ignored under
 rights with the image rightsholders before downloading a corpus.
 
 ## Data and label
+
+Refresh the current Windbird archive month by month (the API rejects overly
+large ranges):
+
+```bash
+uv run python -m scripts.fetch_piou_archive --station-id 2176 --year 2026
+
+# Rebuild the feature table; the chronological split still trains on 2017–2022.
+uv run python -m scripts.build_timestep_dataset
+uv run python -m scripts.train \
+  --wandb-name 2026-holdout-dashboard \
+  --wandb-mode disabled
+uv run python -m scripts.predict_dataset \
+  --year 2026 \
+  --output artifacts/traverse_predictions_2026.csv
+```
+
+The monthly Windbird CSVs are source data and are versioned. Weather caches,
+joined features, model bundles, and prediction outputs remain ignored under
+`pioudata/.weather_cache/` and `artifacts/` and can be reproduced with the
+commands above.
 
 PiouPiou observations with missing coordinates or coordinates more than 1 km
 from the lake station are rejected. Météo-France observations must match the
