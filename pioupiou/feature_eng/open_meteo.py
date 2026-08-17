@@ -1,4 +1,4 @@
-"""Leakage-safe ECMWF feature enrichment inspired by Quartz Solar Forecast.
+"""Leakage-safe Open-Meteo feature engineering inspired by Quartz Solar Forecast.
 
 Quartz uses gridded numerical-weather-prediction (NWP) variables from
 Open-Meteo.  This module adapts that idea to the Traverse decision time: only

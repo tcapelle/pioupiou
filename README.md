@@ -78,14 +78,14 @@ September 2018 at a roughly 20-30-minute cadence. The metadata audit found all
 five candidate pre-noon frames for 2,317 of 2,381 archive-overlapping label
 days (97.31%), including 588 of 592 dates in the 2024-2025 test period.
 
-`grab_webcam_images.py` is a standalone, standard-library-only collector. It
+`scripts.image_pipeline` is a standalone, standard-library-only collector. It
 keeps discovery, selection, and transfer separate so that no images need to be
 downloaded before the exact dataset has been reviewed.
 
 Inventory a period without downloading images:
 
 ```bash
-uv run python grab_webcam_images.py inventory \
+uv run python -m scripts.image_pipeline inventory \
   --start-date 2024-01-01 --end-date 2025-08-15
 ```
 
@@ -93,7 +93,7 @@ Create an exact, editable selection. The time window is half-open and
 `--stride 2` keeps every second capture within each day:
 
 ```bash
-uv run python grab_webcam_images.py plan \
+uv run python -m scripts.image_pipeline plan \
   --start-date 2024-01-01 --end-date 2025-08-15 \
   --from-time 08:00 --until-time 12:00 \
   --stride 2 --quality mini
@@ -104,7 +104,7 @@ bulk collection and machine-learning rights with the image rightsholders,
 download exactly those frozen rows:
 
 ```bash
-uv run python grab_webcam_images.py download
+uv run python -m scripts.image_pipeline download
 ```
 
 Monthly API responses are cached as JSON and existing image files are skipped
@@ -124,7 +124,7 @@ The default label is positive when all of the following hold:
 
 A day needs at least 75% observed afternoon coverage. Otherwise its outcome is
 unknown rather than silently treated as "no Traverse". The thresholds are CLI
-options in `build_traverse_dataset.py`.
+options in `pioupiou.data.daily`.
 
 This is a wind-pattern proxy. It cannot prove that an event had thermal rather
 than synoptic or storm-driven origins. A local Lake Bourget description says
@@ -134,7 +134,7 @@ persistence guard: <https://www.lac-du-bourget.com/a-la-decouverte-de-la-travers
 
 ## Data enrichment
 
-`build_traverse_dataset.py` turns the 1,186,599 raw wind rows into one
+`scripts.build_dataset` turns the 1,186,599 raw wind rows into one
 leakage-free row per usable local day. It:
 
 1. reads only `pioudata/YYYY-MM.csv` files and ignores the overlapping aggregate
@@ -184,37 +184,37 @@ Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
 
 ```bash
 uv sync
-uv run python build_traverse_dataset.py
-uv run python build_timestep_traverse_dataset.py --offline
+uv run python -m scripts.build_dataset
+uv run python -m scripts.build_timestep_dataset --offline
 
-uv run python train_traverse_model.py \
+uv run python -m scripts.train \
   --dataset artifacts/traverse_daily.csv \
   --role variant \
   --wandb-name exp-20260807-spatial-stations-control \
   --wandb-tags exp/20260807-spatial-stations,control
 
-uv run python train_traverse_model.py \
+uv run python -m scripts.train \
   --dataset artifacts/traverse_daily.csv \
   --role spatial \
   --wandb-name exp-20260807-spatial-stations-spatial \
   --wandb-tags exp/20260807-spatial-stations,spatial
 
-uv run python train_traverse_model.py \
+uv run python -m scripts.train \
   --dataset artifacts/traverse_daily.csv \
   --role nwp \
   --wandb-name exp-20260816-quartz-nwp \
   --wandb-tags exp/20260816-quartz-nwp,candidate
 
-uv run python train_traverse_model.py \
+uv run python -m scripts.train \
   --dataset artifacts/traverse_timestep.csv \
   --role same_day \
   --wandb-name exp-20260816-same-day-timesteps \
   --wandb-tags exp/20260816-same-day-timesteps,candidate
 
-uv run python compare_traverse_models.py \
+uv run python -m scripts.evaluate \
   --reference artifacts/traverse_model_variant.joblib \
   --candidate artifacts/traverse_model_spatial.joblib
-uv run python compare_traverse_models.py \
+uv run python -m scripts.evaluate \
   --reference artifacts/traverse_model_variant.joblib \
   --candidate artifacts/traverse_model_nwp.joblib \
   --output artifacts/traverse_comparison_nwp.json \
@@ -228,29 +228,29 @@ If `WANDB_API_KEY` is absent, training records an offline run. Pass
 Score a historical row from the dense dataset:
 
 ```bash
-uv run python predict_traverse.py --date 2025-07-21 --time 12:00
+uv run python -m scripts.predict --date 2025-07-21 --time 12:00
 ```
 
 Prepare an unlabeled row at any minute, then score it:
 
 ```bash
 # Prepare and score a same-day probability at any minute in the model window.
-uv run python prepare_timestep_features.py \
+uv run python -m scripts.prepare_timestep \
   --date 2025-07-21 --time 13:17 \
   --offline-weather \
   --output artifacts/timestep_features_2025-07-21_1317.csv
-uv run python predict_traverse.py \
+uv run python -m scripts.predict \
   --model artifacts/traverse_model_same_day.joblib \
   --features artifacts/timestep_features_2025-07-21_1317.csv
 
 # The older noon-only roles still use their original preparer.
-uv run python prepare_noon_features.py \
+uv run python -m scripts.prepare_noon \
   --date 2025-07-21 \
   --model artifacts/traverse_model_nwp.joblib \
   --piou-input-dir pioudata \
   --offline-weather \
   --output artifacts/noon_features_2025-07-21.csv
-uv run python predict_traverse.py \
+uv run python -m scripts.predict \
   --model artifacts/traverse_model_nwp.joblib \
   --features artifacts/noon_features_2025-07-21.csv
 ```
@@ -268,25 +268,17 @@ model; they are not causal explanations.
 `joblib` uses pickle semantics. Load only model bundles produced by this
 project from a trusted location. For a downloaded artifact, pass a trusted
 out-of-band digest with
-`uv run python predict_traverse.py --model-sha256 ...`; the digest is checked
+`uv run python -m scripts.predict --model-sha256 ...`; the digest is checked
 against one immutable byte snapshot before deserialization and scoring.
 
-## Files
+## Code layout
 
-- `build_traverse_dataset.py`: enrichment, label, and daily feature builder.
-- `build_timestep_traverse_dataset.py`: dense same-day rows, continuous clock
-  features, and event-progress summaries.
-- `open_meteo_features.py`: verified ECMWF/Open-Meteo caching and leakage-safe
-  pre-noon feature aggregation.
-- `grab_webcam_images.py`: standalone webcam archive inventory, exact
-  selection planning, and resumable image download commands.
-- `prepare_noon_features.py`: unlabeled as-of-noon row preparation.
-- `prepare_timestep_features.py`: arbitrary-minute same-day feature preparation.
-- `traverse_model.py`: scikit-learn preprocessing, logistic fit, metrics, and
-  `joblib` serialization.
-- `train_traverse_model.py`: chronological training/evaluation and W&B logging.
-- `compare_traverse_models.py`: reproducible paired-day bootstrap comparison.
-- `predict_traverse.py`: inference for a prepared feature row.
+- `pioupiou/data/`: source loading and daily/timestep dataset construction.
+- `pioupiou/feature_eng/`: leakage-safe Open-Meteo feature aggregation.
+- `pioupiou/inference/`: preprocessing, model fitting, metrics, serialization,
+  and scoring utilities.
+- `scripts/`: dataset builds, image collection, training, evaluation, feature
+  preparation, and prediction entry points.
 - `experiments/20260807-noon-traverse/plan.md`: hypothesis, falsifier, run IDs,
   and review record.
 - `experiments/20260807-spatial-stations/plan.md`: corrected multi-station

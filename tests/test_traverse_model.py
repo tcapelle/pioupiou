@@ -10,15 +10,15 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
-from build_traverse_dataset import (
+from pioupiou.data.daily import (
     METEO_FRANCE_SOURCE_SCHEMA,
     PIOU_SOURCE_SCHEMA,
     LabelConfig,
 )
-from compare_traverse_models import load_validated_inputs, sha256_file
-from prepare_noon_features import bind_to_model_schema
-from predict_traverse import validate_prepared_contract
-from traverse_model import (
+from scripts.evaluate import load_validated_inputs, sha256_file
+from scripts.prepare_noon import bind_to_model_schema
+from scripts.predict import validate_prepared_contract
+from pioupiou.inference.model import (
     average_precision,
     build_pipeline,
     classification_metrics,
@@ -361,7 +361,7 @@ class TraverseModelTests(unittest.TestCase):
                 "split": {"test_years": [2024], "test_rows": 1},
                 "provenance": {
                     "dataset_sha256": dataset_hash,
-                    "source_sha256": {"traverse_model.py": "same"},
+                    "source_sha256": {"pioupiou/inference/model.py": "same"},
                 },
             }
             baseline = root / "baseline.joblib"
@@ -387,7 +387,7 @@ class TraverseModelTests(unittest.TestCase):
                 **common,
                 "provenance": {
                     **common["provenance"],
-                    "source_sha256": {"traverse_model.py": "changed"},
+                    "source_sha256": {"pioupiou/inference/model.py": "changed"},
                 },
                 "role": "spatial",
             }

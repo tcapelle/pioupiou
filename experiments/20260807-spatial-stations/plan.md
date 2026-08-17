@@ -127,7 +127,7 @@ chronological splits. No GPU is required.
 Smoke control (`variant` role):
 
 ```bash
-uv run python train_traverse_model.py \
+uv run python -m scripts.train \
   --dataset artifacts/traverse_daily.csv \
   --role variant --smoke --wandb-mode online \
   --wandb-name exp-20260807-spatial-stations-smoke-baseline \
@@ -137,7 +137,7 @@ uv run python train_traverse_model.py \
 Smoke candidate (`spatial` role):
 
 ```bash
-uv run python train_traverse_model.py \
+uv run python -m scripts.train \
   --dataset artifacts/traverse_daily.csv \
   --role spatial --smoke --wandb-mode online \
   --wandb-name exp-20260807-spatial-stations-smoke-variant \

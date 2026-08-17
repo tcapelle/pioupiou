@@ -2,7 +2,7 @@ import math
 import unittest
 from datetime import date
 
-from open_meteo_features import (
+from pioupiou.feature_eng.open_meteo import (
     EXPECTED_UNITS,
     OPEN_METEO_VARIABLES,
     open_meteo_days_from_payload,

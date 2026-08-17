@@ -11,20 +11,20 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from build_traverse_dataset import (
+from pioupiou.data.daily import (
     METEO_FRANCE_SOURCE_SCHEMA,
     PIOU_SOURCE_SCHEMA,
     label_config_from_payload,
     local_boundary,
 )
-from open_meteo_features import (
+from pioupiou.feature_eng.open_meteo import (
     OPEN_METEO_LATITUDE,
     OPEN_METEO_LONGITUDE,
     OPEN_METEO_MODEL,
     OPEN_METEO_SOURCE_SCHEMA,
     OPEN_METEO_VARIABLES,
 )
-from traverse_model import (
+from pioupiou.inference.model import (
     load_artifact_with_sha256,
     predict_loaded,
     sha256_file,

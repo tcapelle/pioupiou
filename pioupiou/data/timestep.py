@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Build same-day Traverse predictions on a dense local-time grid."""
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
-from build_traverse_dataset import (
+from pioupiou.data.daily import (
     PRIMARY_WEATHER_STATION,
     WEATHER_STATIONS,
     LabelConfig,
