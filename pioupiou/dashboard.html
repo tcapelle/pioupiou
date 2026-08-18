@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Traverse archive</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #173148;
+      --muted: #6e7e89;
+      --paper: #f5f1e8;
+      --card: #fffdf8;
+      --line: #d8ddd9;
+      --blue: #176b87;
+      --blue-soft: #93c6d7;
+      --blue-pale: #d9ebef;
+      --coral: #e1674d;
+      --amber: #d59027;
+      --cloud: #788f9f;
+      --solar: #8b73b5;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 15px/1.45 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main { width: min(1180px, calc(100% - 32px)); margin: 44px auto 64px; }
+    header { display: flex; justify-content: space-between; align-items: end; gap: 28px; margin-bottom: 24px; }
+    h1 { margin: 0; font-family: Georgia, serif; font-size: clamp(34px, 5vw, 58px); font-weight: 500; letter-spacing: -0.04em; }
+    h2 { margin: 0; font-size: 18px; font-weight: 650; }
+    p { margin: 6px 0 0; color: var(--muted); }
+    .through { text-align: right; white-space: nowrap; }
+    .through strong { display: block; color: var(--ink); font-size: 18px; }
+    .grid { display: grid; grid-template-columns: minmax(330px, .82fr) minmax(0, 1.75fr); gap: 18px; }
+    .probability-line { fill: none; stroke: var(--coral); stroke-width: 2.75; stroke-linejoin: round; stroke-linecap: round; }
+    .probability-point { fill: var(--coral); stroke: white; stroke-width: 1.5; cursor: crosshair; }
+    .probability-axis { fill: #a33e2c; }
+    .threshold-line { stroke: var(--coral); stroke-width: 1.25; stroke-dasharray: 5 5; opacity: .65; }
+    .temperature-line { fill: none; stroke: var(--amber); stroke-width: 2.25; stroke-linejoin: round; }
+    .temperature-point { fill: var(--amber); stroke: white; stroke-width: 1.25; }
+    .cloud-line { fill: none; stroke: var(--cloud); stroke-width: 2.25; stroke-linejoin: round; }
+    .cloud-point { fill: var(--cloud); stroke: white; stroke-width: 1.25; }
+    .solar-line { fill: none; stroke: var(--solar); stroke-width: 2.25; stroke-linejoin: round; }
+    .solar-point { fill: var(--solar); stroke: white; stroke-width: 1.25; }
+    .actual-pill { display: inline-block; margin-left: 7px; padding: 2px 8px; border-radius: 20px; background: var(--blue-pale); color: var(--blue); font-size: 12px; vertical-align: 2px; }
+    .actual-pill.event { background: rgb(225 103 77 / 14%); color: #a33e2c; }
+    .card { background: var(--card); border: 1px solid #e5e2d9; border-radius: 18px; box-shadow: 0 10px 32px rgb(38 57 62 / 7%); }
+    .annual { padding: 24px; }
+    .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+    .section-head span { color: var(--muted); font-size: 13px; }
+    #bars { height: 320px; display: flex; align-items: stretch; gap: 7px; margin-top: 22px; padding-top: 20px; border-bottom: 1px solid var(--line); }
+    .bar-button { flex: 1; min-width: 0; display: grid; grid-template-rows: 1fr 25px; gap: 7px; padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; }
+    .bar-track { min-height: 0; display: flex; align-items: end; position: relative; }
+    .bar { width: 100%; min-height: 2px; border-radius: 5px 5px 0 0; background: var(--blue-soft); transition: height .25s ease, background .2s ease; position: relative; }
+    .bar b { position: absolute; bottom: calc(100% + 5px); left: 50%; transform: translateX(-50%); color: var(--ink); font-size: 12px; }
+    .bar-button:hover .bar, .bar-button.selected .bar { background: var(--coral); }
+    .bar-button.selected { color: var(--ink); font-weight: 650; }
+    .bar-button small { font-size: 11px; writing-mode: vertical-rl; transform: rotate(180deg); justify-self: center; }
+    .detail { overflow: hidden; }
+    .detail-head { padding: 24px 24px 10px; display: flex; justify-content: space-between; gap: 18px; align-items: start; }
+    .controls { display: flex; gap: 7px; align-items: center; }
+    button, select { font: inherit; }
+    .nav, select { border: 1px solid var(--line); background: white; color: var(--ink); border-radius: 9px; height: 36px; }
+    .nav { width: 36px; cursor: pointer; font-size: 18px; }
+    .nav:disabled { opacity: .35; cursor: default; }
+    select { max-width: 160px; padding: 0 30px 0 10px; }
+    .metrics { display: flex; gap: 18px; margin-top: 11px; color: var(--muted); font-size: 13px; }
+    .metrics b { display: block; color: var(--ink); font-size: 17px; font-weight: 650; }
+    #wind-chart { width: 100%; min-height: 600px; display: block; }
+    .axis-label { fill: var(--muted); font-size: 12px; }
+    .grid-line { stroke: var(--line); stroke-width: 1; }
+    .range { fill: var(--blue-pale); }
+    .average { fill: none; stroke: var(--blue); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+    .hover-point { fill: transparent; cursor: crosshair; }
+    .hover-point:hover { fill: var(--coral); }
+    .needle { fill: var(--blue); stroke: white; stroke-width: .7; }
+    .needle-ring { fill: white; stroke: var(--blue-soft); }
+    .note { padding: 0 24px 22px; color: var(--muted); font-size: 12px; }
+    .legend { display: flex; gap: 18px; flex-wrap: wrap; }
+    .swatch { display: inline-block; width: 20px; height: 8px; margin-right: 6px; border-radius: 4px; vertical-align: 1px; }
+    .swatch.range-key { background: var(--blue-pale); }
+    .swatch.avg-key { height: 2px; background: var(--blue); vertical-align: 4px; }
+    .swatch.prediction-key { height: 3px; background: var(--coral); vertical-align: 3px; }
+    .swatch.temperature-key { height: 3px; background: var(--amber); vertical-align: 3px; }
+    .swatch.secondary-weather-key { height: 3px; background: var(--solar); vertical-align: 3px; }
+    .status { padding: 80px 24px; text-align: center; color: var(--muted); }
+    @media (max-width: 850px) {
+      .grid { grid-template-columns: 1fr; }
+      #bars { height: 240px; }
+      header { align-items: start; }
+    }
+    @media (max-width: 560px) {
+      main { width: min(100% - 20px, 1180px); margin-top: 24px; }
+      header, .detail-head { flex-direction: column; align-items: stretch; }
+      .through { text-align: left; }
+      .controls { justify-content: space-between; }
+      select { flex: 1; max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Traverse archive</h1>
+        <p>Wind-rule candidates at Lac du Bourget</p>
+      </div>
+      <div class="through"><span>Valid observations through</span><strong id="data-through">Loading…</strong></div>
+    </header>
+
+    <div class="grid">
+      <section class="card annual">
+        <div class="section-head">
+          <h2>Traverse candidates per year</h2>
+          <span id="total-events"></span>
+        </div>
+        <div id="bars" aria-label="Traverse candidates per year"></div>
+      </section>
+
+      <section class="card detail">
+        <div id="loading" class="status">Reading the observation archive…</div>
+        <div id="dashboard" hidden>
+          <div class="detail-head">
+            <div>
+              <h2 id="event-title">Event</h2>
+              <div class="metrics">
+                <span><b id="peak-gust">–</b>peak gust</span>
+                <span><b id="qualifying">–</b>qualifying wind</span>
+                <span><b id="coverage">–</b>coverage</span>
+              </div>
+            </div>
+            <div class="controls">
+              <button id="previous" class="nav" aria-label="Previous event">‹</button>
+              <select id="event-select" aria-label="Event date"></select>
+              <button id="next" class="nav" aria-label="Next event">›</button>
+            </div>
+          </div>
+          <svg id="wind-chart" viewBox="0 0 820 640" role="img" aria-labelledby="event-title"></svg>
+          <div class="note">
+            <div class="legend">
+              <span><i class="swatch range-key"></i>minimum–maximum</span>
+              <span><i class="swatch avg-key"></i>average wind</span>
+              <span id="prediction-legend"><i class="swatch prediction-key"></i>model probability</span>
+              <span><i class="swatch temperature-key"></i>temperature</span>
+              <span><i id="secondary-weather-swatch" class="swatch secondary-weather-key"></i><span id="secondary-weather-label">solar radiation</span></span>
+              <span>Needle points where the wind is blowing (N = north)</span>
+              <span>Candidate = wind-rule match, not independently confirmed</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <script>
+    const state = { data: null, year: null, yearEvents: [], eventIndex: 0 };
+    const ns = "http://www.w3.org/2000/svg";
+    const byId = id => document.getElementById(id);
+    const svgNode = (name, attrs = {}, text = "") => {
+      const node = document.createElementNS(ns, name);
+      Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+      if (text) node.textContent = text;
+      return node;
+    };
+    const localDate = value => new Intl.DateTimeFormat("en-GB", {
+      day: "numeric", month: "short", year: "numeric"
+    }).format(new Date(`${value}T12:00:00`));
+
+    function renderBars() {
+      const container = byId("bars");
+      container.replaceChildren();
+      const maximum = Math.max(...state.data.years.map(item => item.events));
+      state.data.years.forEach(item => {
+        const button = document.createElement("button");
+        button.className = `bar-button${item.year === state.year ? " selected" : ""}`;
+        button.title = `${item.events} rule-matched candidates across ${item.observed_days} sufficiently observed days`;
+        button.innerHTML = `<span class="bar-track"><span class="bar" style="height:${100 * item.events / maximum}%"><b>${item.events}</b></span></span><small>${item.year}</small>`;
+        button.addEventListener("click", () => selectYear(item.year));
+        container.append(button);
+      });
+    }
+
+    function selectYear(year) {
+      state.year = year;
+      const predictionYear = Number(state.data.predictions?.metadata?.year);
+      const hasPredictions = year === predictionYear;
+      state.yearEvents = hasPredictions
+        ? state.data.predictions.days.map(day => day.wind)
+        : state.data.events.filter(event => event.year === year);
+      state.eventIndex = state.yearEvents.length - 1;
+      byId("prediction-legend").hidden = !hasPredictions;
+      const select = byId("event-select");
+      select.replaceChildren(...state.yearEvents.map((event, index) => {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = `${hasPredictions ? (event.traverse ? "● " : "○ ") : ""}${localDate(event.date)}`;
+        return option;
+      }));
+      renderBars();
+      renderEvent();
+    }
+
+    function renderEvent() {
+      const event = state.yearEvents[state.eventIndex];
+      if (!event) return;
+      byId("event-select").value = state.eventIndex;
+      byId("previous").disabled = state.eventIndex === 0;
+      byId("next").disabled = state.eventIndex === state.yearEvents.length - 1;
+      byId("event-title").innerHTML = `${localDate(event.date)} <span class="actual-pill${event.traverse ? " event" : ""}">${event.traverse ? "Traverse candidate" : "No rule match"}</span>`;
+      byId("peak-gust").textContent = `${event.peak_gust_knots.toFixed(1)} kn`;
+      byId("qualifying").textContent = `${event.qualifying_minutes.toFixed(0)} min`;
+      byId("coverage").textContent = `${event.coverage.toFixed(0)}%`;
+      renderChart(event);
+    }
+
+    function renderChart(event) {
+      const svg = byId("wind-chart");
+      svg.replaceChildren();
+      const width = 820, left = 56, right = 60;
+      const windTop = 24, windBottom = 235, directionY = 280;
+      const temperatureTop = 330, temperatureBottom = 405;
+      const cloudTop = 445, cloudBottom = 520;
+      const chartWidth = width - left - right;
+      const observations = event.observations.map(item => ({ ...item, date: new Date(item.time) }));
+      const weather = (event.weather || []).map(item => ({ ...item, date: new Date(item.time) }));
+      const predictionDay = state.data.predictions?.days.find(day => day.date === event.date);
+      const start = new Date(`${event.date}T06:30:00`);
+      const end = new Date(`${event.date}T20:00:00`);
+      const x = date => left + (date - start) / (end - start) * chartWidth;
+      const xMinutes = minutes => left + (minutes - 390) / (1200 - 390) * chartWidth;
+      const rawMax = Math.max(...observations.map(item => item.max));
+      const yMaximum = Math.max(10, Math.ceil(rawMax / 5) * 5);
+      const y = value => windBottom - value / yMaximum * (windBottom - windTop);
+      const probabilityY = probability => windBottom - probability * (windBottom - windTop);
+      const tickHours = [7, 9, 11, 13, 15, 17, 19];
+
+      tickHours.forEach(hour => {
+        const when = new Date(`${event.date}T${String(hour).padStart(2, "0")}:00:00`);
+        svg.append(svgNode("line", { x1: x(when), x2: x(when), y1: windTop, y2: cloudBottom, class: "grid-line" }));
+        svg.append(svgNode("text", { x: x(when), y: 550, "text-anchor": "middle", class: "axis-label" }, `${String(hour).padStart(2, "0")}:00`));
+      });
+
+      for (let value = 0; value <= yMaximum; value += 5) {
+        svg.append(svgNode("line", { x1: left, x2: width - right, y1: y(value), y2: y(value), class: "grid-line" }));
+        svg.append(svgNode("text", { x: left - 10, y: y(value) + 4, "text-anchor": "end", class: "axis-label" }, `${value}`));
+      }
+      svg.append(svgNode("text", { x: 12, y: 17, class: "axis-label" }, "knots"));
+
+      const pointString = (items, key) => items.map(item => `${x(item.date)},${y(item[key])}`).join(" ");
+      const rangePoints = `${pointString(observations, "max")} ${pointString([...observations].reverse(), "min")}`;
+      svg.append(svgNode("polygon", { points: rangePoints, class: "range" }));
+      svg.append(svgNode("polyline", { points: pointString(observations, "avg"), class: "average" }));
+
+      observations.forEach(item => {
+        const point = svgNode("circle", { cx: x(item.date), cy: y(item.avg), r: 6, class: "hover-point" });
+        const label = item.date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        point.append(svgNode("title", {}, `${label} · ${item.avg.toFixed(1)} kn average · ${item.max.toFixed(1)} kn gust · ${item.direction.toFixed(0)}°`));
+        svg.append(point);
+      });
+
+      if (predictionDay) {
+        for (let value = 0; value <= 1.001; value += .25) {
+          svg.append(svgNode("text", { x: width - right + 10, y: probabilityY(value) + 4, class: "axis-label probability-axis" }, `${Math.round(value * 100)}%`));
+        }
+        svg.append(svgNode("text", { x: width - 5, y: 17, "text-anchor": "end", class: "axis-label probability-axis" }, "probability"));
+        const threshold = Number(state.data.predictions.metadata.threshold);
+        svg.append(svgNode("line", { x1: left, x2: width - right, y1: probabilityY(threshold), y2: probabilityY(threshold), class: "threshold-line" }));
+        svg.append(svgNode("text", { x: width - right - 5, y: probabilityY(threshold) - 6, "text-anchor": "end", class: "axis-label probability-axis" }, "threshold"));
+        const predictionPoints = predictionDay.predictions.map(point => `${xMinutes(point.issue_minutes)},${probabilityY(point.probability)}`).join(" ");
+        svg.append(svgNode("polyline", { points: predictionPoints, class: "probability-line" }));
+        predictionDay.predictions.forEach(point => {
+          const dot = svgNode("circle", { cx: xMinutes(point.issue_minutes), cy: probabilityY(point.probability), r: 4, class: "probability-point" });
+          const hour = Math.floor(point.issue_minutes / 60), minute = point.issue_minutes % 60;
+          dot.append(svgNode("title", {}, `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")} · ${(point.probability * 100).toFixed(1)}% Traverse probability`));
+          svg.append(dot);
+        });
+      }
+
+      svg.append(svgNode("line", { x1: left, x2: width - right, y1: directionY, y2: directionY, class: "grid-line" }));
+      const stride = Math.max(1, Math.ceil(observations.length / 55));
+      observations.filter((_, index) => index % stride === 0).forEach(item => {
+        const group = svgNode("g", { transform: `translate(${x(item.date)} ${directionY})` });
+        group.append(svgNode("circle", { r: 7, class: "needle-ring" }));
+        const flowDirection = (item.direction + 180) % 360;
+        const needle = svgNode("path", { d: "M 0 -11 L 4 5 L 0 2 L -4 5 Z", class: "needle", transform: `rotate(${flowDirection})` });
+        needle.append(svgNode("title", {}, `Blowing toward ${flowDirection.toFixed(0)}° (from ${item.direction.toFixed(0)}°)`));
+        group.append(needle);
+        svg.append(group);
+      });
+      svg.append(svgNode("text", { x: left - 18, y: directionY - 11, "text-anchor": "middle", class: "axis-label" }, "N"));
+      svg.append(svgNode("text", { x: left - 7, y: directionY + 4, "text-anchor": "middle", class: "axis-label" }, "E"));
+      svg.append(svgNode("text", { x: left - 18, y: directionY + 17, "text-anchor": "middle", class: "axis-label" }, "S"));
+      svg.append(svgNode("text", { x: left - 30, y: directionY + 4, "text-anchor": "middle", class: "axis-label" }, "W"));
+
+      const temperatures = weather.filter(item => item.temperature_c !== null);
+      if (temperatures.length) {
+        const values = temperatures.map(item => item.temperature_c);
+        let minimum = Math.floor(Math.min(...values));
+        let maximum = Math.ceil(Math.max(...values));
+        if (maximum - minimum < 2) { minimum -= 1; maximum += 1; }
+        const temperatureY = value => temperatureBottom - (value - minimum) / (maximum - minimum) * (temperatureBottom - temperatureTop);
+        [minimum, (minimum + maximum) / 2, maximum].forEach(value => {
+          svg.append(svgNode("line", { x1: left, x2: width - right, y1: temperatureY(value), y2: temperatureY(value), class: "grid-line" }));
+          svg.append(svgNode("text", { x: left - 10, y: temperatureY(value) + 4, "text-anchor": "end", class: "axis-label" }, `${value.toFixed(0)}°`));
+        });
+        svg.append(svgNode("text", { x: left, y: temperatureTop - 9, class: "axis-label" }, "Temperature · CHAMBERY-AIX"));
+        const points = temperatures.map(item => `${x(item.date)},${temperatureY(item.temperature_c)}`).join(" ");
+        svg.append(svgNode("polyline", { points, class: "temperature-line" }));
+        temperatures.forEach(item => {
+          const dot = svgNode("circle", { cx: x(item.date), cy: temperatureY(item.temperature_c), r: 3.5, class: "temperature-point" });
+          dot.append(svgNode("title", {}, `${item.date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${item.temperature_c.toFixed(1)} °C`));
+          svg.append(dot);
+        });
+      }
+
+      const clouds = weather.filter(item => item.cloud_cover_oktas !== null);
+      if (clouds.length) {
+        byId("secondary-weather-label").textContent = "cloud cover";
+        byId("secondary-weather-swatch").style.background = "var(--cloud)";
+        const cloudY = value => cloudBottom - value / 9 * (cloudBottom - cloudTop);
+        [0, 4, 8].forEach(value => {
+          svg.append(svgNode("line", { x1: left, x2: width - right, y1: cloudY(value), y2: cloudY(value), class: "grid-line" }));
+          svg.append(svgNode("text", { x: left - 10, y: cloudY(value) + 4, "text-anchor": "end", class: "axis-label" }, `${value}`));
+        });
+        svg.append(svgNode("text", { x: left, y: cloudTop - 9, class: "axis-label" }, "Cloud cover · oktas (9 = obscured)"));
+        const points = clouds.map(item => `${x(item.date)},${cloudY(item.cloud_cover_oktas)}`).join(" ");
+        svg.append(svgNode("polyline", { points, class: "cloud-line" }));
+        clouds.forEach(item => {
+          const dot = svgNode("circle", { cx: x(item.date), cy: cloudY(item.cloud_cover_oktas), r: 3.5, class: "cloud-point" });
+          dot.append(svgNode("title", {}, `${item.date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${item.cloud_cover_oktas.toFixed(0)} oktas`));
+          svg.append(dot);
+        });
+      } else {
+        const radiation = weather.filter(item => item.global_radiation_wm2 !== null);
+        byId("secondary-weather-label").textContent = "solar radiation";
+        byId("secondary-weather-swatch").style.background = "var(--solar)";
+        if (radiation.length) {
+          const maximum = Math.max(100, Math.ceil(Math.max(...radiation.map(item => item.global_radiation_wm2)) / 100) * 100);
+          const radiationY = value => cloudBottom - value / maximum * (cloudBottom - cloudTop);
+          [0, maximum / 2, maximum].forEach(value => {
+            svg.append(svgNode("line", { x1: left, x2: width - right, y1: radiationY(value), y2: radiationY(value), class: "grid-line" }));
+            svg.append(svgNode("text", { x: left - 10, y: radiationY(value) + 4, "text-anchor": "end", class: "axis-label" }, `${value.toFixed(0)}`));
+          });
+          svg.append(svgNode("text", { x: left, y: cloudTop - 9, class: "axis-label" }, "Global solar radiation · W/m²"));
+          const points = radiation.map(item => `${x(item.date)},${radiationY(item.global_radiation_wm2)}`).join(" ");
+          svg.append(svgNode("polyline", { points, class: "solar-line" }));
+          radiation.forEach(item => {
+            const dot = svgNode("circle", { cx: x(item.date), cy: radiationY(item.global_radiation_wm2), r: 3.5, class: "solar-point" });
+            dot.append(svgNode("title", {}, `${item.date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${item.global_radiation_wm2.toFixed(0)} W/m²`));
+            svg.append(dot);
+          });
+        }
+      }
+
+      if (!weather.length) {
+        svg.append(svgNode("text", { x: left, y: temperatureTop + 25, class: "axis-label" }, "No cached CHAMBERY-AIX observations for this day"));
+      }
+      svg.append(svgNode("text", { x: left, y: 605, class: "axis-label" }, `${event.observations.length} wind observations · local time (${state.data.metadata.timezone})`));
+    }
+
+    byId("event-select").addEventListener("change", event => {
+      state.eventIndex = Number(event.target.value);
+      renderEvent();
+    });
+    byId("previous").addEventListener("click", () => { state.eventIndex--; renderEvent(); });
+    byId("next").addEventListener("click", () => { state.eventIndex++; renderEvent(); });
+
+    fetch("/dashboard/data")
+      .then(response => {
+        if (!response.ok) throw new Error(`Data request failed (${response.status})`);
+        return response.json();
+      })
+      .then(data => {
+        state.data = data;
+        const latest = new Date(data.metadata.latest_observation);
+        byId("data-through").textContent = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(latest);
+        byId("total-events").textContent = `${data.events.length} total`;
+        byId("loading").hidden = true;
+        byId("dashboard").hidden = false;
+        selectYear(data.years.at(-1).year);
+      })
+      .catch(error => { byId("loading").textContent = error.message; });
+  </script>
+</body>
+</html>

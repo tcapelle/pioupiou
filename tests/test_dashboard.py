@@ -1,0 +1,27 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from pioupiou.dashboard import kmh_to_knots, load_predictions
+
+
+class DashboardTests(unittest.TestCase):
+    def test_kmh_to_knots_uses_exact_conversion(self):
+        self.assertAlmostEqual(kmh_to_knots(18.52), 10.0)
+
+    def test_load_predictions_groups_timesteps_by_day(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "predictions.csv"
+            path.write_text(
+                "date,year,issue_minutes,label,traverse_probability,predict_traverse,threshold\n"
+                "2026-06-01,2026,390,1,0.25,1,0.2\n"
+                "2026-06-01,2026,420,1,0.5,1,0.2\n"
+            )
+            result = load_predictions(path)
+        self.assertEqual(len(result["days"]), 1)
+        self.assertTrue(result["days"][0]["label"])
+        self.assertEqual(result["days"][0]["predictions"][1]["probability"], 0.5)
+
+
+if __name__ == "__main__":
+    unittest.main()
