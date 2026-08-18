@@ -1,8 +1,9 @@
 # Same-day Traverse predictor
 
 This repository contains one research model: the probability that a qualifying
-Traverse occurs during today's fixed `[12:00, 20:00)` local window, given all
-observations available at the requested time.
+Traverse occurs during today's fixed `[12:00, 20:00)` local window on a hot day
+from May through September, given all observations available at the requested
+time. Dates outside May–September are outside the model population.
 
 The model can score any minute from 06:30 through 19:59. It is a forecast before
 the event window and increasingly a nowcast afterward; late scores may include
@@ -16,18 +17,23 @@ are limited to:
 
 - seasonal and issue-time sine/cosine encodings;
 - recent PiouPiou wind speed, gust, direction, trend, and freshness summaries;
-- progress toward today's Traverse criterion before the requested time; and
-- recent observations from the primary CHAMBERY-AIX Météo-France station.
+- progress toward today's candidate wind criterion before the requested time;
+- recent observations from the primary CHAMBERY-AIX Météo-France station;
+- temperature summaries from BELLEY, NOVALAISE, and MONT DU CHAT; and
+- explicit lowland, lake-side, and ridge temperature contrasts.
 
 All observations at or after the requested time are excluded. The chronological
 split is 2017–2022 training, 2023 validation, and 2024–2025 test. The selected
-model uses `L2=1` (`C=1`) and a validation-selected decision threshold of
-`0.24938`.
+model uses `L2=10` (`C=0.1`) and a validation-selected decision threshold of
+`0.13411`.
 
-Held-out average precision was 0.3232 at 06:30, 0.4434 at noon, 0.5526 at 14:00,
-0.6937 at 16:00, 0.8450 at 18:00, and 0.9909 at 19:30. See the
-[experiment record](experiments/20260816-same-day-timesteps/plan.md) for the
-complete interpretation and metrics.
+Held-out average precision was 0.2765 at 06:30, 0.4235 at noon, 0.4317 at 14:00,
+0.5156 at 16:00, 0.6074 at 18:00, and 0.7042 at 19:30. Overall held-out average
+precision was 0.3982. See the
+[current experiment record](experiments/20260818-hot-season-multistation/plan.md)
+for the complete interpretation and metrics. The earlier wind-only target is
+preserved in the
+[original experiment record](experiments/20260816-same-day-timesteps/plan.md).
 
 ## Build, train, and test
 
@@ -140,10 +146,13 @@ from the lake station are rejected. Météo-France observations must match the
 configured CHAMBERY-AIX station location and use accepted quality codes 0, 1,
 or 9.
 
-A day is positive when observations in `[12:00, 20:00)` show wind of at least
-18.52 km/h from 225°–315° for at least 30 cumulative minutes and three
-consecutive samples, with gaps no larger than 10 minutes. Days below 75% target
-window coverage have an unknown label and are excluded.
+A day is in scope only from May 1 through September 30. It is positive when the
+official CHAMBERY-AIX daily maximum temperature is strictly greater than 25°C
+and observations in `[12:00, 20:00)` show wind of at least 18.52 km/h from
+225°–315° for at least 30 cumulative minutes and three consecutive samples,
+with gaps no larger than 10 minutes. Cooler in-season days are negative. Dates
+outside the season and days below 75% target-window coverage have an unknown
+label and are excluded from training.
 
 This is a leakage-free retrospective prototype, not a production warning
 service. Do not tune feature choices or thresholds on the held-out years.

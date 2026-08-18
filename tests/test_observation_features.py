@@ -12,6 +12,7 @@ from pioupiou.data.daily import (
     LabelConfig,
     PiouObservation,
     deduplicate_piou_observations,
+    discover_daily_weather_resources,
     discover_weather_resources,
     label_config_from_payload,
     piou_features,
@@ -45,10 +46,19 @@ class ObservationFeatureTests(unittest.TestCase):
     def test_target_requires_duration_and_consecutive_run(self):
         start = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)
         values = [observation(start + timedelta(minutes=4 * index)) for index in range(8)]
-        result = target_label(self.day, values, self.config)
+        result = target_label(self.day, values, self.config, 30.0)
         self.assertEqual(result["label"], 1)
+        self.assertEqual(result["meta_target_hot_day"], 1)
+        self.assertEqual(result["meta_target_wind_event"], 1)
         self.assertGreaterEqual(result["meta_target_qualifying_minutes"], 30.0)
         self.assertEqual(result["meta_target_longest_qualifying_run"], 8)
+
+    def test_target_requires_hot_day_inside_may_through_september(self):
+        start = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)
+        values = [observation(start + timedelta(minutes=4 * index)) for index in range(8)]
+        self.assertEqual(target_label(self.day, values, self.config, 25.0)["label"], 0)
+        winter = date(2024, 12, 1)
+        self.assertIsNone(target_label(winter, values, self.config, 30.0))
 
     def test_piou_features_exclude_the_cutoff(self):
         before = datetime(2024, 7, 1, 11, 56, tzinfo=LOCAL)
@@ -111,6 +121,13 @@ class ObservationFeatureTests(unittest.TestCase):
         self.assertEqual(features["mf_last_age_minutes"], 60.0)
         self.assertEqual(features["mf_dewpoint_depression_c_latest"], 6.0)
         self.assertAlmostEqual(features["mf_global_radiation_mean_w_m2"], 1000.0)
+        belley = weather_features(
+            [valid],
+            cutoff=datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL),
+            maximum_age_minutes=90,
+            prefix="mf_belley",
+        )
+        self.assertEqual(belley["mf_belley_temperature_c_latest"], 10.0)
 
     def test_realtime_weather_mapping_preserves_units_and_cutoff(self):
         row = {
@@ -164,6 +181,31 @@ class ObservationFeatureTests(unittest.TestCase):
                 cache_dir, 2021, 2023, offline=True, departments=("73",)
             )
         self.assertEqual([resource.department for resource in selected], ["73"])
+
+    def test_daily_resource_discovery_selects_temperature_archive(self):
+        resources = [
+            {
+                "id": "daily-73",
+                "title": "QUOT_departement_73_periode_1950-2024_RR-T-Vent",
+                "url": "https://example.invalid/73.csv.gz",
+                "last_modified": "2026-08-01T00:00:00+00:00",
+            },
+            {
+                "id": "other-73",
+                "title": "QUOT_departement_73_periode_1950-2024_autres-parametres",
+                "url": "https://example.invalid/other.csv.gz",
+                "last_modified": "2026-08-01T00:00:00+00:00",
+            },
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            cache_dir = Path(directory)
+            (cache_dir / "meteofrance_daily_resources.json").write_text(
+                json.dumps({"resources": resources})
+            )
+            selected = discover_daily_weather_resources(
+                cache_dir, 2021, 2023, offline=True
+            )
+        self.assertEqual([resource.resource_id for resource in selected], ["daily-73"])
 
     def test_label_config_payload_must_be_complete(self):
         payload = asdict(LabelConfig())

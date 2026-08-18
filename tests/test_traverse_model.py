@@ -84,6 +84,7 @@ class TraverseModelTests(unittest.TestCase):
                 "cal_doy_sin": [0.0],
                 "piou_last_wind_avg_kmh": [5.0],
                 "mf_temperature_c_latest": [12.0],
+                "mf_belley_temperature_c_latest": [11.5],
                 "other_station_temperature_c_latest": [11.0],
                 "external_temperature_c_latest": [10.0],
                 "debug_value": [99.0],
@@ -93,6 +94,7 @@ class TraverseModelTests(unittest.TestCase):
             feature_names(frame),
             [
                 "cal_doy_sin",
+                "mf_belley_temperature_c_latest",
                 "mf_temperature_c_latest",
                 "piou_last_wind_avg_kmh",
             ],
@@ -178,7 +180,7 @@ class TraverseModelTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "trusted value"):
                 load_artifact_with_sha256(model, "0" * 64)
 
-    def test_inference_requires_fresh_primary_feeds(self):
+    def test_inference_requires_fresh_weather_feeds(self):
         features = [
             "piou_last_wind_avg_kmh",
             "piou_observation_count_morning",
@@ -186,6 +188,9 @@ class TraverseModelTests(unittest.TestCase):
             "mf_temperature_c_latest",
             "mf_core_observation_count_morning",
             "mf_last_age_minutes",
+            "mf_belley_temperature_c_latest",
+            "mf_belley_core_observation_count_morning",
+            "mf_belley_last_age_minutes",
         ]
         with tempfile.TemporaryDirectory() as directory:
             model = Path(directory) / "model.joblib"
@@ -198,6 +203,9 @@ class TraverseModelTests(unittest.TestCase):
                     "mf_temperature_c_latest": [12.0],
                     "mf_core_observation_count_morning": [6],
                     "mf_last_age_minutes": [60],
+                    "mf_belley_temperature_c_latest": [11.0],
+                    "mf_belley_core_observation_count_morning": [6],
+                    "mf_belley_last_age_minutes": [60],
                 }
             )
             probability, _, _ = predict_frame(model, row)
@@ -206,6 +214,10 @@ class TraverseModelTests(unittest.TestCase):
             stale["mf_last_age_minutes"] = 91
             with self.assertRaisesRegex(ValueError, "stale mf_"):
                 predict_frame(model, stale)
+            stale_belley = row.copy()
+            stale_belley["mf_belley_last_age_minutes"] = 91
+            with self.assertRaisesRegex(ValueError, "stale mf_belley_"):
+                predict_frame(model, stale_belley)
 
 
 if __name__ == "__main__":
