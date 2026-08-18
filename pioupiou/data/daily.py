@@ -22,6 +22,10 @@ import numpy as np
 
 DATA_GOUV_DATASET_ID = "6569b4473bedf2e7abad3b72"
 DATA_GOUV_API = f"https://www.data.gouv.fr/api/1/datasets/{DATA_GOUV_DATASET_ID}/"
+DAILY_DATA_GOUV_DATASET_ID = "6569b51ae64326786e4e8e1a"
+DAILY_DATA_GOUV_API = (
+    f"https://www.data.gouv.fr/api/1/datasets/{DAILY_DATA_GOUV_DATASET_ID}/"
+)
 PIOU_LATITUDE = 45.701731
 PIOU_LONGITUDE = 5.883505
 PIOU_MAX_LOCATION_DISTANCE_KM = 1.0
@@ -31,6 +35,10 @@ PIOU_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T")
 RESOURCE_PERIOD = re.compile(
     r"HOR_departement_(?P<department>\d{2})_periode_"
     r"(?P<start_year>\d{4})-(?P<end_year>\d{4})"
+)
+DAILY_RESOURCE_PERIOD = re.compile(
+    r"QUOT_departement_(?P<department>\d{2})_periode_"
+    r"(?P<start_year>\d{4})-(?P<end_year>\d{4})_RR-T-Vent"
 )
 USER_AGENT = "pioupiou-traverse-research/1.0"
 QUALITY_ACCEPTED = {"0", "1", "9"}
@@ -59,6 +67,16 @@ WEATHER_CACHE_FIELDS = (
     "ALTI",
     "AAAAMMJJHH",
 ) + tuple(item for field in WEATHER_RAW_FIELDS for item in (field, f"Q{field}"))
+DAILY_WEATHER_CACHE_FIELDS = (
+    "NUM_POSTE",
+    "NOM_USUEL",
+    "LAT",
+    "LON",
+    "ALTI",
+    "AAAAMMJJ",
+    "TX",
+    "QTX",
+)
 
 
 @dataclass(frozen=True)
@@ -82,6 +100,43 @@ PRIMARY_WEATHER_STATION = WeatherStation(
     235,
 )
 
+BELLEY_WEATHER_STATION = WeatherStation(
+    "belley",
+    "01034004",
+    "01",
+    "BELLEY",
+    45.769333,
+    5.688,
+    330,
+)
+
+MONT_DU_CHAT_WEATHER_STATION = WeatherStation(
+    "mont_du_chat",
+    "73051001",
+    "73",
+    "MONT DU CHAT",
+    45.6605,
+    5.8215,
+    1496,
+)
+
+NOVALAISE_WEATHER_STATION = WeatherStation(
+    "novalaise",
+    "73191001",
+    "73",
+    "NOVALAISE",
+    45.597333,
+    5.776833,
+    460,
+)
+
+WEATHER_STATIONS = (
+    PRIMARY_WEATHER_STATION,
+    BELLEY_WEATHER_STATION,
+    NOVALAISE_WEATHER_STATION,
+    MONT_DU_CHAT_WEATHER_STATION,
+)
+
 
 @dataclass(frozen=True)
 class LabelConfig:
@@ -100,6 +155,10 @@ class LabelConfig:
     maximum_feature_age_minutes: float = 30.0
     weather_morning_start_hour: int = 6
     maximum_weather_feature_age_minutes: float = 90.0
+    season_start_month: int = 5
+    season_end_month: int = 9
+    hot_day_temperature_threshold_c: float = 25.0
+    hot_day_station_id: str = PRIMARY_WEATHER_STATION.station_id
 
 
 @dataclass(frozen=True)
@@ -154,8 +213,12 @@ def validate_label_config(config: LabelConfig) -> None:
         and 0 < config.minimum_target_coverage <= 1
         and config.maximum_feature_age_minutes > 0
         and config.maximum_weather_feature_age_minutes > 0
+        and 1 <= config.season_start_month <= config.season_end_month <= 12
+        and config.hot_day_temperature_threshold_c > 0
     ):
         raise ValueError("Label thresholds, coverage, and feature ages must be valid")
+    if not config.hot_day_station_id:
+        raise ValueError("hot_day_station_id must be non-empty")
 
 
 def label_config_from_payload(payload: Any) -> LabelConfig:
@@ -174,11 +237,13 @@ def label_config_from_payload(payload: Any) -> LabelConfig:
         "minimum_consecutive_samples",
         "piou_morning_start_hour",
         "weather_morning_start_hour",
+        "season_start_month",
+        "season_end_month",
     }
     for name, value in payload.items():
-        if name == "timezone_name":
+        if name in {"timezone_name", "hot_day_station_id"}:
             if not isinstance(value, str) or not value:
-                raise ValueError("label_config.timezone_name must be a non-empty string")
+                raise ValueError(f"label_config.{name} must be a non-empty string")
         elif name in integer_fields:
             if type(value) is not int:
                 raise ValueError(f"label_config.{name} must be an integer")
@@ -438,9 +503,20 @@ def elapsed_minutes(later: datetime, earlier: datetime) -> float:
     ).total_seconds() / 60.0
 
 
+def is_traverse_season(local_day: date, config: LabelConfig) -> bool:
+    return config.season_start_month <= local_day.month <= config.season_end_month
+
+
 def target_label(
-    local_day: date, observations: Sequence[PiouObservation], config: LabelConfig
+    local_day: date,
+    observations: Sequence[PiouObservation],
+    config: LabelConfig,
+    daily_max_temperature_c: float,
 ) -> dict[str, float | int] | None:
+    if not is_traverse_season(local_day, config) or not np.isfinite(
+        daily_max_temperature_c
+    ):
+        return None
     timezone_local = ZoneInfo(config.timezone_name)
     start = local_boundary(local_day, config.cutoff_hour, timezone_local)
     end = local_boundary(local_day, config.target_end_hour, timezone_local)
@@ -482,12 +558,16 @@ def target_label(
         else:
             current_run = 0
             previous_qualifying_time = None
-    positive = (
+    wind_event = (
         qualifying_minutes >= config.minimum_cumulative_minutes
         and longest_run >= config.minimum_consecutive_samples
     )
+    hot_day = daily_max_temperature_c > config.hot_day_temperature_threshold_c
     return {
-        "label": int(positive),
+        "label": int(hot_day and wind_event),
+        "meta_target_hot_day": int(hot_day),
+        "meta_target_daily_max_temperature_c": float(daily_max_temperature_c),
+        "meta_target_wind_event": int(wind_event),
         "meta_target_observations": len(target),
         "meta_target_coverage_fraction": coverage_fraction,
         "meta_target_qualifying_minutes": qualifying_minutes,
@@ -660,6 +740,59 @@ def discover_weather_resources(
     return sorted(selected, key=lambda item: (item.department, item.start_year))
 
 
+def daily_resource_from_payload(payload: dict[str, Any]) -> WeatherResource | None:
+    title = str(payload.get("title") or "")
+    match = DAILY_RESOURCE_PERIOD.fullmatch(title)
+    if match is None:
+        return None
+    return WeatherResource(
+        resource_id=str(payload["id"]),
+        title=title,
+        url=str(payload["url"]),
+        start_year=int(match.group("start_year")),
+        end_year=int(match.group("end_year")),
+        last_modified=str(payload.get("last_modified") or ""),
+        filesize=int(payload["filesize"]) if payload.get("filesize") is not None else None,
+        department=match.group("department"),
+    )
+
+
+def discover_daily_weather_resources(
+    cache_dir: Path,
+    start_year: int,
+    end_year: int,
+    offline: bool,
+    departments: Sequence[str] = ("73",),
+) -> list[WeatherResource]:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    metadata_cache = cache_dir / "meteofrance_daily_resources.json"
+    if offline:
+        if not metadata_cache.exists():
+            raise FileNotFoundError(
+                f"Offline daily resource metadata not found: {metadata_cache}"
+            )
+        payload = json.loads(metadata_cache.read_text())
+    else:
+        with open_url(DAILY_DATA_GOUV_API, timeout=60) as response:
+            payload = json.load(response)
+        metadata_cache.write_text(json.dumps(payload, indent=2) + "\n")
+    resources = [daily_resource_from_payload(item) for item in payload["resources"]]
+    selected = [
+        item
+        for item in resources
+        if item is not None
+        and item.department in departments
+        and item.start_year <= end_year
+        and item.end_year >= start_year
+    ]
+    if not selected:
+        raise ValueError(
+            f"No daily resources for departments {sorted(departments)} "
+            f"cover {start_year}-{end_year}"
+        )
+    return sorted(selected, key=lambda item: (item.department, item.start_year))
+
+
 def filtered_resources_path(
     cache_dir: Path, resource: WeatherResource, station_ids: Sequence[str]
 ) -> Path:
@@ -668,6 +801,12 @@ def filtered_resources_path(
         return cache_dir / f"meteofrance_{station_ids[0]}_{resource.resource_id}.csv.gz"
     station_token = "-".join(station_ids)
     return cache_dir / f"meteofrance_{station_token}_{resource.resource_id}.csv.gz"
+
+
+def filtered_daily_resource_path(
+    cache_dir: Path, resource: WeatherResource, station_id: str
+) -> Path:
+    return cache_dir / f"meteofrance_daily_{station_id}_{resource.resource_id}.csv.gz"
 
 
 def cache_weather_resource(
@@ -777,6 +916,104 @@ def cache_weather_resource(
     return target, counts
 
 
+def cache_daily_weather_resource(
+    cache_dir: Path,
+    resource: WeatherResource,
+    station: WeatherStation,
+    refresh: bool,
+    offline: bool,
+) -> Path:
+    target = filtered_daily_resource_path(cache_dir, resource, station.station_id)
+    sidecar = target.with_name(target.name + ".metadata.json")
+    if target.exists() and sidecar.exists() and not refresh:
+        cached = json.loads(sidecar.read_text())
+        if (
+            cached.get("resource_id") == resource.resource_id
+            and cached.get("last_modified") == resource.last_modified
+            and cached.get("url") == resource.url
+            and cached.get("station_id") == station.station_id
+            and cached.get("cache_sha256") == sha256_file(target)
+        ):
+            return target
+        if offline:
+            raise ValueError(f"Daily weather cache metadata mismatch for {target}")
+    if offline:
+        raise FileNotFoundError(f"Offline daily weather cache not found: {target}")
+    temporary = target.with_suffix(target.suffix + ".part")
+    print(
+        f"Downloading {resource.title} ({resource.filesize or 'unknown'} compressed bytes) ...",
+        file=sys.stderr,
+        flush=True,
+    )
+    row_count = 0
+    try:
+        with open_url(resource.url, timeout=300) as response:
+            with gzip.GzipFile(fileobj=response, mode="rb") as compressed:
+                with io.TextIOWrapper(compressed, encoding="utf-8", newline="") as text_input:
+                    reader = csv.DictReader(text_input, delimiter=";")
+                    missing = set(DAILY_WEATHER_CACHE_FIELDS).difference(
+                        reader.fieldnames or []
+                    )
+                    if missing:
+                        raise ValueError(
+                            f"Meteo-France daily resource missing fields: {sorted(missing)}"
+                        )
+                    with gzip.open(
+                        temporary, "wt", encoding="utf-8", newline=""
+                    ) as output:
+                        writer = csv.DictWriter(
+                            output, fieldnames=DAILY_WEATHER_CACHE_FIELDS
+                        )
+                        writer.writeheader()
+                        for row in reader:
+                            if row["NUM_POSTE"] == station.station_id:
+                                writer.writerow(
+                                    {
+                                        field: row.get(field, "")
+                                        for field in DAILY_WEATHER_CACHE_FIELDS
+                                    }
+                                )
+                                row_count += 1
+        temporary.replace(target)
+        sidecar.write_text(
+            json.dumps(
+                {
+                    "resource_id": resource.resource_id,
+                    "last_modified": resource.last_modified,
+                    "url": resource.url,
+                    "station_id": station.station_id,
+                    "row_count": row_count,
+                    "cache_sha256": sha256_file(target),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+    print(f"Cached {row_count:,} daily rows.", file=sys.stderr, flush=True)
+    return target
+
+
+def iter_cached_daily_max_temperature(
+    paths: Sequence[Path], station: WeatherStation
+) -> Iterator[tuple[date, float]]:
+    for path in paths:
+        with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                if row["NUM_POSTE"] != station.station_id:
+                    continue
+                if not valid_weather_station_location(
+                    row["LAT"], row["LON"], station
+                ):
+                    continue
+                value = weather_value(row, "TX")
+                if np.isfinite(value):
+                    yield datetime.strptime(row["AAAAMMJJ"], "%Y%m%d").date(), value
+
+
 def weather_value(row: dict[str, str], field: str) -> float:
     raw = row.get(field, "")
     quality = row.get(f"Q{field}", "")
@@ -843,16 +1080,22 @@ def weather_features(
     observations: Sequence[dict[str, Any]],
     cutoff: datetime | None = None,
     maximum_age_minutes: float = math.inf,
+    prefix: str = "mf",
+    freshness_fields: Sequence[str] = WEATHER_FRESHNESS_FIELDS,
 ) -> dict[str, float]:
-    output: dict[str, float] = {"mf_observation_count_morning": float(len(observations))}
+    output: dict[str, float] = {
+        f"{prefix}_observation_count_morning": float(len(observations))
+    }
     core_observations = [
         item
         for item in observations
         if isinstance(item.get("timestamp_local"), datetime)
-        and all(np.isfinite(item[field]) for field in WEATHER_FRESHNESS_FIELDS)
+        and all(np.isfinite(item[field]) for field in freshness_fields)
     ]
-    output["mf_core_observation_count_morning"] = float(len(core_observations))
-    output["mf_last_age_minutes"] = (
+    output[f"{prefix}_core_observation_count_morning"] = float(
+        len(core_observations)
+    )
+    output[f"{prefix}_last_age_minutes"] = (
         elapsed_minutes(cutoff, core_observations[-1]["timestamp_local"])
         if cutoff is not None and core_observations
         else float("nan")
@@ -867,40 +1110,46 @@ def weather_features(
         ("FF", "wind_speed_10m_ms"),
     ):
         values = finite_values(observations, field)
-        output[f"mf_{name}_latest"] = latest_recent(
+        output[f"{prefix}_{name}_latest"] = latest_recent(
             observations, field, cutoff, maximum_age_minutes
         )
-        output[f"mf_{name}_mean"] = safe_mean(values)
-        output[f"mf_{name}_delta_morning"] = first_last_delta(observations, field)
-    temperature = output["mf_temperature_c_latest"]
-    dewpoint = output["mf_dewpoint_c_latest"]
-    output["mf_dewpoint_depression_c_latest"] = (
+        output[f"{prefix}_{name}_mean"] = safe_mean(values)
+        output[f"{prefix}_{name}_delta_morning"] = first_last_delta(
+            observations, field
+        )
+    temperature = output[f"{prefix}_temperature_c_latest"]
+    dewpoint = output[f"{prefix}_dewpoint_c_latest"]
+    output[f"{prefix}_dewpoint_depression_c_latest"] = (
         temperature - dewpoint
         if np.isfinite(temperature) and np.isfinite(dewpoint)
         else float("nan")
     )
-    output["mf_precipitation_morning_mm"] = safe_sum(
+    output[f"{prefix}_precipitation_morning_mm"] = safe_sum(
         finite_values(observations, "RR1")
     )
-    output["mf_sunshine_morning_minutes"] = safe_sum(
+    output[f"{prefix}_sunshine_morning_minutes"] = safe_sum(
         finite_values(observations, "INS")
     )
     for field, name in (("GLO", "global"), ("DIR", "direct"), ("DIF", "diffuse")):
         values = finite_values(observations, field)
-        output[f"mf_{name}_radiation_morning_j_cm2"] = safe_sum(values)
-        output[f"mf_{name}_radiation_mean_w_m2"] = safe_mean(
+        output[f"{prefix}_{name}_radiation_morning_j_cm2"] = safe_sum(values)
+        output[f"{prefix}_{name}_radiation_mean_w_m2"] = safe_mean(
             [value * (10000.0 / 3600.0) for value in values]
         )
     clouds = finite_values(observations, "N")
-    output["mf_cloud_cover_mean_oktas"] = safe_mean([value for value in clouds if value <= 8])
-    output["mf_sky_obscured_fraction"] = safe_mean([float(value == 9) for value in clouds])
+    output[f"{prefix}_cloud_cover_mean_oktas"] = safe_mean(
+        [value for value in clouds if value <= 8]
+    )
+    output[f"{prefix}_sky_obscured_fraction"] = safe_mean(
+        [float(value == 9) for value in clouds]
+    )
     direction_latest = latest_recent(observations, "DD", cutoff, maximum_age_minutes)
-    output["mf_wind_direction_latest_sin"] = (
+    output[f"{prefix}_wind_direction_latest_sin"] = (
         math.sin(math.radians(direction_latest))
         if np.isfinite(direction_latest)
         else float("nan")
     )
-    output["mf_wind_direction_latest_cos"] = (
+    output[f"{prefix}_wind_direction_latest_cos"] = (
         math.cos(math.radians(direction_latest))
         if np.isfinite(direction_latest)
         else float("nan")
@@ -910,7 +1159,7 @@ def weather_features(
         for item in observations
         if np.isfinite(item["FF"]) and np.isfinite(item["DD"])
     ]
-    output["mf_west_component_mean_ms"] = safe_mean(
+    output[f"{prefix}_west_component_mean_ms"] = safe_mean(
         [speed * math.cos(math.radians(direction - 270.0)) for speed, direction in paired]
     )
     return output

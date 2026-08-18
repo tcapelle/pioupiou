@@ -16,22 +16,30 @@ import pandas as pd
 
 from pioupiou.data.daily import (
     PRIMARY_WEATHER_STATION,
+    WEATHER_STATIONS,
+    LabelConfig,
+    WeatherStation,
     WEATHER_RAW_FIELDS,
     calendar_features,
+    is_traverse_season,
     label_config_from_payload,
     piou_features,
     piou_observations_from_archive_payload,
     valid_weather_station_location,
-    weather_features,
 )
-from pioupiou.data.timestep import issue_time_features, traverse_progress_features
+from pioupiou.data.timestep import (
+    issue_time_features,
+    station_weather_features,
+    temperature_contrast_features,
+    traverse_progress_features,
+)
 from pioupiou.inference.model import load_artifact_with_sha256, predict_loaded
 
 
 PIOU_URL = "https://api.pioupiou.fr/v1/archive/2176?start=last-day&stop=now"
-METEO_URL = (
+METEO_URL_TEMPLATE = (
     "https://public-api.meteofrance.fr/public/DPPaquetObs/v1/paquet/horaire"
-    "?id-departement=73&format=json"
+    "?id-departement={department}&format=json"
 )
 
 
@@ -49,17 +57,19 @@ def finite(value: Any, conversion=lambda item: item) -> float:
 
 
 def meteofrance_observations(
-    payload: list[dict[str, Any]], cutoff: datetime
+    payload: list[dict[str, Any]],
+    cutoff: datetime,
+    station: WeatherStation = PRIMARY_WEATHER_STATION,
 ) -> list[dict[str, Any]]:
     local_timezone = cutoff.tzinfo
     assert local_timezone is not None
     start = datetime.combine(cutoff.date(), time(6), local_timezone)
     observations: dict[datetime, dict[str, Any]] = {}
     for row in payload:
-        if str(row.get("geo_id_insee")) != PRIMARY_WEATHER_STATION.station_id:
+        if str(row.get("geo_id_insee")) != station.station_id:
             continue
         if not valid_weather_station_location(
-            row.get("lat"), row.get("lon"), PRIMARY_WEATHER_STATION
+            row.get("lat"), row.get("lon"), station
         ):
             continue
         timestamp_utc = datetime.fromisoformat(
@@ -86,12 +96,37 @@ def meteofrance_observations(
             }
         )
         observations[timestamp_utc] = {
-            "station_id": PRIMARY_WEATHER_STATION.station_id,
+            "station_id": station.station_id,
             "timestamp_utc": timestamp_utc,
             "timestamp_local": timestamp_local,
             **values,
         }
     return [observations[key] for key in sorted(observations)]
+
+
+def current_weather_features(
+    payloads: dict[str, list[dict[str, Any]]],
+    cutoff: datetime,
+    config: LabelConfig,
+) -> tuple[dict[str, float], dict[str, list[dict[str, Any]]]]:
+    features: dict[str, float] = {}
+    observations: dict[str, list[dict[str, Any]]] = {}
+    for station in WEATHER_STATIONS:
+        station_observations = meteofrance_observations(
+            payloads[station.department], cutoff, station
+        )
+        if not station_observations:
+            raise ValueError(
+                f"insufficient_data: no Météo-France observations for {station.name}"
+            )
+        observations[station.slug] = station_observations
+        features.update(
+            station_weather_features(
+                station, station_observations, cutoff, config
+            )
+        )
+    features.update(temperature_contrast_features(features))
+    return features, observations
 
 
 def predict_now(
@@ -108,6 +143,14 @@ def predict_now(
     issue_minutes = cutoff.hour * 60 + cutoff.minute
     if not 6 * 60 + 30 <= issue_minutes < 20 * 60:
         raise ValueError("Current time is outside the model's 06:30-19:59 window")
+    if not is_traverse_season(cutoff.date(), config):
+        return {
+            "prediction_time": cutoff.isoformat(),
+            "model_sha256": model_sha256,
+            "status": "outside_traverse_season",
+            "traverse_probability": 0.0,
+            "predict_traverse": False,
+        }
 
     piou_payload = fetch_json(PIOU_URL)
     piou_observations = piou_observations_from_archive_payload(
@@ -127,14 +170,16 @@ def predict_now(
         if piou_start <= item.timestamp_local < cutoff
     )
 
-    meteo_payload = fetch_json(METEO_URL, token)
-    meteo_observations = meteofrance_observations(meteo_payload, cutoff)
-    if not meteo_observations:
-        raise ValueError("insufficient_data: no Météo-France observations")
-    meteo = weather_features(
-        meteo_observations,
-        cutoff=cutoff,
-        maximum_age_minutes=config.maximum_weather_feature_age_minutes,
+    meteo_payloads = {
+        department: fetch_json(
+            METEO_URL_TEMPLATE.format(department=department), token
+        )
+        for department in sorted(
+            {station.department for station in WEATHER_STATIONS}
+        )
+    }
+    meteo, meteo_observations = current_weather_features(
+        meteo_payloads, cutoff, config
     )
 
     prepared = {
@@ -158,10 +203,14 @@ def predict_now(
         "model_sha256": model_sha256,
         "piou_observation_time": piou_latest.isoformat(),
         "piou_last_age_minutes": piou["piou_last_age_minutes"],
-        "mf_observation_time": meteo_observations[-1][
+        "mf_observation_time": meteo_observations[PRIMARY_WEATHER_STATION.slug][-1][
             "timestamp_local"
         ].isoformat(),
         "mf_last_age_minutes": meteo["mf_last_age_minutes"],
+        "weather_observation_times": {
+            slug: values[-1]["timestamp_local"].isoformat()
+            for slug, values in meteo_observations.items()
+        },
         "traverse_probability": float(probability[0]),
         "predict_traverse": bool(predicted[0]),
     }

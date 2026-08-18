@@ -14,15 +14,17 @@ from zoneinfo import ZoneInfo
 from pioupiou.data.timestep import (
     DEFAULT_END_MINUTES,
     DEFAULT_START_MINUTES,
-    build_primary_weather_timeline,
+    build_weather_timeline,
     cutoff_for_minutes,
     issue_time_features,
     parse_clock,
     traverse_progress_features,
+    weather_feed_ages,
 )
 from pioupiou.data.daily import (
     calendar_features,
     deduplicate_piou_observations,
+    is_traverse_season,
     label_config_from_payload,
     piou_features,
     read_month,
@@ -104,6 +106,10 @@ def main() -> int:
     except ValueError as error:
         raise SystemExit(f"Model has an invalid label contract: {error}") from error
     local_day = date.fromisoformat(args.date)
+    if not is_traverse_season(local_day, config):
+        raise SystemExit(
+            f"Requested date is outside the model's May-September season: {local_day}"
+        )
     issue_minutes = int(args.time)
     if not DEFAULT_START_MINUTES <= issue_minutes < DEFAULT_END_MINUTES:
         raise SystemExit(
@@ -125,7 +131,7 @@ def main() -> int:
     )
     if piou is None:
         raise SystemExit("insufficient_data: missing or stale PiouPiou observations")
-    weather = build_primary_weather_timeline(
+    weather = build_weather_timeline(
         args.cache_dir,
         config,
         local_day.year,
@@ -134,17 +140,19 @@ def main() -> int:
         args.refresh_weather,
         args.offline_weather,
     )
-    airport = weather.get((local_day, issue_minutes))
-    if airport is None:
+    station_weather = weather.get((local_day, issue_minutes))
+    if station_weather is None:
         raise SystemExit("insufficient_data: no Météo-France observations")
-    weather_age = float(airport.get("mf_last_age_minutes", float("nan")))
-    if (
-        not math.isfinite(weather_age)
-        or weather_age > config.maximum_weather_feature_age_minutes
-    ):
-        raise SystemExit(
-            f"insufficient_data: Météo-France feed age is {weather_age!r} minutes"
-        )
+    weather_ages = weather_feed_ages(station_weather)
+    for station, weather_age in weather_ages.items():
+        if (
+            not math.isfinite(weather_age)
+            or weather_age > config.maximum_weather_feature_age_minutes
+        ):
+            raise SystemExit(
+                f"insufficient_data: {station} Météo-France feed age is "
+                f"{weather_age!r} minutes"
+            )
 
     prepared = {
         **calendar_features(local_day),
@@ -152,7 +160,7 @@ def main() -> int:
         **issue_time_features(issue_minutes),
         **piou,
         **traverse_progress_features(local_day, observations, config, cutoff),
-        **airport,
+        **station_weather,
     }
     try:
         row = bind_to_model_schema(prepared, list(payload["feature_names"]))
@@ -167,7 +175,7 @@ def main() -> int:
                 "time": f"{issue_minutes // 60:02d}:{issue_minutes % 60:02d}",
                 "output": str(args.output),
                 "piou_last_age_minutes": piou["piou_last_age_minutes"],
-                "mf_last_age_minutes": weather_age,
+                "weather_last_age_minutes": weather_ages,
             },
             indent=2,
             sort_keys=True,

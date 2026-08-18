@@ -457,12 +457,23 @@ def predict_loaded(
     payload: dict[str, Any], pipeline: Pipeline, frame: pd.DataFrame
 ) -> tuple[np.ndarray, np.ndarray, list[list[tuple[str, float]]]]:
     feature_names = list(payload["feature_names"])
+    suffix = "_core_observation_count_morning"
+    weather_prefixes = {
+        name[: -len(suffix)]
+        for name in feature_names
+        if name.startswith("mf") and name.endswith(suffix)
+    }
     guard_columns = {
         "piou_observation_count_morning",
         "piou_last_age_minutes",
-        "mf_core_observation_count_morning",
-        "mf_last_age_minutes",
     }
+    for prefix in weather_prefixes:
+        guard_columns.update(
+            {
+                f"{prefix}_core_observation_count_morning",
+                f"{prefix}_last_age_minutes",
+            }
+        )
     artifact_missing = sorted(guard_columns.difference(feature_names))
     if artifact_missing:
         raise ValueError(f"invalid_model: missing feed guard features {artifact_missing}")
@@ -477,14 +488,17 @@ def predict_loaded(
             "maximum_feature_age_minutes",
             30.0,
         ),
+    ]
+    feed_guards.extend(
         (
-            "mf_",
-            "mf_core_observation_count_morning",
-            "mf_last_age_minutes",
+            f"{prefix}_",
+            f"{prefix}_core_observation_count_morning",
+            f"{prefix}_last_age_minutes",
             "maximum_weather_feature_age_minutes",
             90.0,
-        ),
-    ]
+        )
+        for prefix in sorted(weather_prefixes)
+    )
     for prefix, count_name, age_name, maximum_age_key, default_maximum_age in feed_guards:
         physical = [
             name

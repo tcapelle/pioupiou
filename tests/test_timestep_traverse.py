@@ -53,10 +53,10 @@ class TimestepTraverseTests(unittest.TestCase):
             config,
             datetime(2024, 7, 1, 12, 40, tzinfo=LOCAL),
         )
-        self.assertEqual(before_event["piou_traverse_observed_so_far"], 0.0)
-        self.assertEqual(after_event["piou_traverse_observed_so_far"], 1.0)
+        self.assertEqual(before_event["piou_wind_event_observed_so_far"], 0.0)
+        self.assertEqual(after_event["piou_wind_event_observed_so_far"], 1.0)
         self.assertGreaterEqual(
-            after_event["piou_traverse_qualifying_minutes_so_far"], 30.0
+            after_event["piou_wind_event_qualifying_minutes_so_far"], 30.0
         )
 
 if __name__ == "__main__":

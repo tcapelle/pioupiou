@@ -2,14 +2,14 @@
 
 ## Conclusion
 
-All 71 inputs of the current same-day model can be constructed at prediction
+All 98 inputs of the current same-day model can be constructed at prediction
 time from two observation feeds and the local clock:
 
 | Feature family | Count | Source | Status |
 | --- | ---: | --- | --- |
 | `cal_` | 4 | Requested local date and time | Available locally |
 | `piou_` | 33 | OpenWindMap Windbird 2176 | Live and archive feeds verified |
-| `mf_` | 34 | Météo-France CHAMBERY-AIX, station `73329001` | Live feed verified for the configured station |
+| `mf_` | 61 | Four Météo-France stations and thermal contrasts | Historical feeds verified; live token required |
 
 The root-level `realtime_inference.py` command implements this path with the
 existing feature engineering and trained model. It expects a temporary
@@ -34,7 +34,8 @@ PiouPiou CSV files and the historical Météo-France cache.
 ## Time and leakage contract
 
 - The model scores any local minute from `06:30` through `19:59` in
-  `Europe/Paris`.
+  `Europe/Paris`, from May 1 through September 30. Outside that season the API
+  returns probability zero without scoring the model.
 - Only observations strictly before the requested issue time may enter a
   feature. An API response received later must still be filtered by the
   observation's validity timestamp.
@@ -42,11 +43,13 @@ PiouPiou CSV files and the historical Météo-France cache.
   three hours.
 - Météo-France summaries begin at `06:00` local time.
 - PiouPiou's newest usable observation must be no more than 30 minutes old.
-- The newest Météo-France observation with finite temperature, humidity, wind
-  speed, and wind direction must be no more than 90 minutes old.
+- CHAMBERY-AIX requires a newest observation with finite temperature, humidity,
+  wind speed, and wind direction no more than 90 minutes old. The three
+  secondary stations require finite temperature with the same age limit.
 - The prediction window remains `[12:00, 20:00)` local time. After noon, the
-  model is partly a nowcast and includes Traverse progress observed before the
-  issue time.
+  model is partly a nowcast and includes candidate wind progress observed
+  before the issue time. The target also requires the eventual CHAMBERY-AIX
+  daily maximum to exceed 25°C.
 
 These boundaries are part of the trained model contract. A live implementation
 must not substitute receipt time for observation time or include observations
@@ -102,11 +105,11 @@ The 33 `piou_` model inputs are all derived from the fields above:
   gust, west fraction, mean heading sine/cosine, and mean west component;
 - three-hour dynamics: `piou_wind_avg_trend_3h_kmh_per_hour` and
   `piou_gust_factor_3h`;
-- observed Traverse progress since noon:
-  `piou_traverse_observations_so_far`,
-  `piou_traverse_qualifying_minutes_so_far`,
-  `piou_traverse_longest_run_so_far`, and
-  `piou_traverse_observed_so_far`.
+- observed candidate wind progress since noon:
+  `piou_wind_event_observations_so_far`,
+  `piou_wind_event_qualifying_minutes_so_far`,
+  `piou_wind_event_longest_run_so_far`, and
+  `piou_wind_event_observed_so_far`.
 
 The exact rolling feature names are:
 
@@ -122,21 +125,22 @@ piou_west_component_mean_{30m,1h,3h}_kmh
 
 ## Météo-France observations
 
-The configured source is the hourly CHAMBERY-AIX station:
+The model uses four hourly stations:
 
-| Property | Value |
-| --- | --- |
-| Station ID | `73329001` |
-| Department | `73` |
-| Location | `(45.641333, 5.877833)` |
-| Elevation | 235 m |
+| Station | ID | Department | Location | Elevation |
+| --- | --- | --- | --- | ---: |
+| CHAMBERY-AIX | `73329001` | 73 | `(45.641333, 5.877833)` | 235 m |
+| BELLEY | `01034004` | 01 | `(45.769333, 5.688000)` | 330 m |
+| NOVALAISE | `73191001` | 73 | `(45.597333, 5.776833)` | 460 m |
+| MONT DU CHAT | `73051001` | 73 | `(45.660500, 5.821500)` | 1,496 m |
 
 Météo-France documents its observation API as real time, with a 24-hour
 retention window. Hourly observations are normally published about ten minutes
 after the round hour. The appropriate feed is the 24-hour hourly package for
-department 73, filtered to station `73329001`:
+departments 01 and 73, filtered to the configured station IDs:
 
 ```text
+https://public-api.meteofrance.fr/public/DPPaquetObs/v1/paquet/horaire?id-departement=01&format=json
 https://public-api.meteofrance.fr/public/DPPaquetObs/v1/paquet/horaire?id-departement=73&format=json
 ```
 
@@ -181,7 +185,7 @@ to derive W/m². Feeding the real-time J/m² value without first dividing by
 
 ### Derived Météo-France features
 
-The 34 `mf_` inputs are:
+CHAMBERY-AIX retains the 34 original `mf_` inputs:
 
 ```text
 mf_observation_count_morning
@@ -220,6 +224,17 @@ mf_sky_obscured_fraction
 mf_wind_direction_latest_sin
 mf_wind_direction_latest_cos
 mf_west_component_mean_ms
+```
+
+Each secondary station contributes observation count, temperature-valid count,
+age, latest temperature, mean temperature, and morning temperature change,
+using prefixes `mf_belley_`, `mf_novalaise_`, and `mf_mont_du_chat_`. Nine
+`mf_contrast_` inputs encode latest, mean, and morning-change differences for:
+
+```text
+BELLEY - CHAMBERY-AIX
+NOVALAISE - CHAMBERY-AIX
+BELLEY - MONT DU CHAT
 ```
 
 Météo-France notes that station-specific unavailable values are returned as
