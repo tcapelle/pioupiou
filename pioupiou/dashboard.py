@@ -18,12 +18,15 @@ from pioupiou.data.daily import (
     group_piou_by_local_day,
     iter_cached_weather,
     iter_unique_piou,
-    local_boundary,
+    monthly_files,
     target_label,
 )
+from pioupiou.data.timestep import build_daily_max_temperatures
 
 
 KMH_PER_KNOT = 1.852
+DASHBOARD_START_MINUTES = 12 * 60
+DASHBOARD_END_MINUTES = 21 * 60
 
 
 def kmh_to_knots(value: float) -> float:
@@ -37,8 +40,8 @@ def serialize_wind_day(
         "date": local_day.isoformat(),
         "year": local_day.year,
         "traverse": bool(label["label"]),
-        "qualifying_minutes": round(
-            float(label["meta_target_qualifying_minutes"]), 1
+        "sustained_minutes": round(
+            float(label["meta_target_longest_qualifying_run_minutes"]), 1
         ),
         "coverage": round(
             100.0 * float(label["meta_target_coverage_fraction"]), 1
@@ -64,21 +67,31 @@ def load_predictions(path: Path) -> dict[str, Any] | None:
         return None
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     labels: dict[str, bool] = {}
+    event_onsets: dict[str, float] = {}
     with path.open(newline="") as handle:
         for row in csv.DictReader(handle):
             day = row["date"]
             labels[day] = bool(int(row["label"]))
+            onset = row.get("event_onset_minutes", "")
+            if onset:
+                event_onsets[day] = round(float(onset), 3)
             grouped[day].append(
                 {
                     "issue_minutes": int(row["issue_minutes"]),
                     "probability": round(float(row["traverse_probability"]), 6),
+                    "onset_evidence": round(float(row["onset_evidence"]), 6),
                 }
             )
     metadata_path = path.with_suffix(".metadata.json")
     metadata = json.loads(metadata_path.read_text()) if metadata_path.exists() else {}
     return {
         "days": [
-            {"date": day, "label": labels[day], "predictions": grouped[day]}
+            {
+                "date": day,
+                "label": labels[day],
+                "event_onset_minutes": event_onsets.get(day),
+                "predictions": grouped[day],
+            }
             for day in sorted(grouped)
         ],
         "metadata": metadata,
@@ -97,7 +110,10 @@ def load_weather_series(
         timestamp = observation["timestamp_local"]
         day = timestamp.date().isoformat()
         minutes = timestamp.hour * 60 + timestamp.minute
-        if day not in dates or not 390 <= minutes < 1200:
+        if (
+            day not in dates
+            or not DASHBOARD_START_MINUTES <= minutes < DASHBOARD_END_MINUTES
+        ):
             continue
         temperature = float(observation["T"])
         cloud_cover = float(observation["N"])
@@ -139,6 +155,17 @@ def build_dashboard_data(
     prediction_dates = (
         {item["date"] for item in predictions["days"]} if predictions else set()
     )
+    source_years = [int(path.stem[:4]) for path in monthly_files(input_dir)]
+    if not source_years:
+        raise ValueError(f"No monthly PiouPiou files found in {input_dir}")
+    daily_max_temperatures = build_daily_max_temperatures(
+        weather_cache_dir,
+        config,
+        min(source_years),
+        max(source_years),
+        refresh=False,
+        offline=True,
+    )
     iterator, counters = iter_unique_piou(input_dir, local_timezone)
     annual: dict[int, dict[str, int]] = defaultdict(
         lambda: {"events": 0, "observed_days": 0}
@@ -151,22 +178,28 @@ def build_dashboard_data(
     for local_day, observations in group_piou_by_local_day(iterator):
         first_observation = first_observation or observations[0].timestamp_local
         latest_observation = observations[-1].timestamp_local
-        label = target_label(local_day, observations, config)
+        label = target_label(
+            local_day,
+            observations,
+            config,
+            daily_max_temperatures.get(local_day, float("nan")),
+        )
         if label is None:
             continue
         annual[local_day.year]["observed_days"] += 1
         day_text = local_day.isoformat()
         if not label["label"] and day_text not in prediction_dates:
             continue
-        end = local_boundary(local_day, config.target_end_hour, local_timezone)
-        end_utc = end.astimezone(timezone.utc)
         display_start = datetime.combine(
-            local_day, time(6, 30), local_timezone
+            local_day, time(12), local_timezone
+        ).astimezone(timezone.utc)
+        display_end = datetime.combine(
+            local_day, time(21), local_timezone
         ).astimezone(timezone.utc)
         displayed = [
             item
             for item in observations
-            if display_start <= item.timestamp_utc < end_utc
+            if display_start <= item.timestamp_utc < display_end
         ]
         wind_day = serialize_wind_day(local_day, displayed, label)
         if day_text in prediction_dates:
@@ -204,6 +237,7 @@ def build_dashboard_data(
             ),
             "timezone": config.timezone_name,
             "window": f"{config.cutoff_hour:02d}:00–{config.target_end_hour:02d}:00",
+            "display_window": "12:00–21:00",
             "speed_threshold_knots": round(
                 kmh_to_knots(config.speed_threshold_kmh), 1
             ),

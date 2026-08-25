@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from pioupiou.data.timestep import (
     cutoff_for_minutes,
-    traverse_progress_features,
+    traverse_event_onset,
 )
 from pioupiou.data.daily import LabelConfig, PiouObservation, piou_features
 
@@ -24,6 +24,24 @@ def observation(local_time: datetime, speed: float = 20.0, heading: float = 270.
 
 
 class TimestepTraverseTests(unittest.TestCase):
+    def test_positive_event_onset_starts_the_first_sustained_run(self):
+        local_day = date(2024, 7, 1)
+        config = LabelConfig(minimum_target_coverage=0.01)
+        start = datetime(2024, 7, 1, 12, 5, tzinfo=LOCAL)
+        observations = [observation(start, speed=10.0)] + [
+            observation(start + timedelta(minutes=5 * index))
+            for index in range(1, 7)
+        ]
+        onset = traverse_event_onset(
+            local_day, observations, config, {"label": 1}
+        )
+        self.assertEqual(onset, observations[1].timestamp_local)
+        self.assertIsNone(
+            traverse_event_onset(
+                local_day, observations, config, {"label": 0}
+            )
+        )
+
     def test_piou_features_accept_an_arbitrary_minute_cutoff(self):
         local_day = date(2024, 7, 1)
         config = LabelConfig(minimum_target_coverage=0.0)
@@ -35,29 +53,6 @@ class TimestepTraverseTests(unittest.TestCase):
         )
         self.assertEqual(features["piou_last_wind_avg_kmh"], 7.0)
         self.assertEqual(features["piou_last_age_minutes"], 3.0)
-
-    def test_progress_uses_only_event_evidence_seen_so_far(self):
-        local_day = date(2024, 7, 1)
-        config = LabelConfig(minimum_target_coverage=0.0)
-        start = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)
-        values = [observation(start + timedelta(minutes=5 * index)) for index in range(8)]
-        before_event = traverse_progress_features(
-            local_day,
-            values,
-            config,
-            datetime(2024, 7, 1, 11, 0, tzinfo=LOCAL),
-        )
-        after_event = traverse_progress_features(
-            local_day,
-            values,
-            config,
-            datetime(2024, 7, 1, 12, 40, tzinfo=LOCAL),
-        )
-        self.assertEqual(before_event["piou_wind_event_observed_so_far"], 0.0)
-        self.assertEqual(after_event["piou_wind_event_observed_so_far"], 1.0)
-        self.assertGreaterEqual(
-            after_event["piou_wind_event_qualifying_minutes_so_far"], 30.0
-        )
 
 if __name__ == "__main__":
     unittest.main()

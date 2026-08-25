@@ -29,14 +29,13 @@ from pioupiou.data.daily import (
     discover_weather_resources,
     elapsed_minutes,
     group_piou_by_local_day,
-    held_minutes,
-    is_qualifying,
     iter_cached_daily_max_temperature,
     iter_cached_weather,
     iter_unique_piou,
     local_boundary,
     monthly_files,
     piou_features,
+    qualifying_wind_summary,
     sha256_file,
     target_label,
     weather_features,
@@ -47,9 +46,35 @@ from pioupiou.data.daily import (
 DEFAULT_START_MINUTES = 6 * 60 + 30
 DEFAULT_END_MINUTES = 20 * 60
 DEFAULT_STEP_MINUTES = 30
+FULL_LEAD_WEIGHT_MINUTES = 180.0
 PREDICTION_MINUTES = tuple(
     range(DEFAULT_START_MINUTES, DEFAULT_END_MINUTES, DEFAULT_STEP_MINUTES)
 )
+
+
+def traverse_event_onset(
+    local_day: date,
+    observations: Sequence[PiouObservation],
+    config: LabelConfig,
+    daily_target: dict[str, float | int],
+) -> datetime | None:
+    """Return the start of the first sustained qualifying run on a positive day."""
+    if int(daily_target["label"]) == 0:
+        return None
+    timezone_local = ZoneInfo(config.timezone_name)
+    target_start = local_boundary(local_day, config.cutoff_hour, timezone_local)
+    target_end = local_boundary(local_day, config.target_end_hour, timezone_local)
+    start_utc = target_start.astimezone(timezone.utc)
+    end_utc = target_end.astimezone(timezone.utc)
+    target = [
+        item
+        for item in observations
+        if start_utc <= item.timestamp_utc < end_utc
+    ]
+    onset = qualifying_wind_summary(target, target_end, config)["event_onset"]
+    if onset is None:
+        raise ValueError("A positive Traverse day has no qualifying observation")
+    return onset
 
 
 def parse_clock(value: str) -> int:
@@ -75,69 +100,6 @@ def issue_time_features(issue_minutes: int) -> dict[str, float]:
     }
 
 
-def traverse_progress_features(
-    local_day: date,
-    observations: Sequence[PiouObservation],
-    config: LabelConfig,
-    cutoff: datetime,
-) -> dict[str, float]:
-    """Describe candidate wind-event evidence seen strictly before cutoff."""
-    timezone_local = ZoneInfo(config.timezone_name)
-    target_start = local_boundary(local_day, config.cutoff_hour, timezone_local)
-    target_end = local_boundary(local_day, config.target_end_hour, timezone_local)
-    effective_end = min(cutoff, target_end)
-    if effective_end <= target_start:
-        return {
-            "piou_wind_event_observations_so_far": 0.0,
-            "piou_wind_event_qualifying_minutes_so_far": 0.0,
-            "piou_wind_event_longest_run_so_far": 0.0,
-            "piou_wind_event_observed_so_far": 0.0,
-        }
-    start_utc = target_start.astimezone(timezone.utc)
-    end_utc = effective_end.astimezone(timezone.utc)
-    observed = [
-        item
-        for item in observations
-        if start_utc <= item.timestamp_utc < end_utc
-    ]
-    qualifying_minutes = 0.0
-    longest_run = 0
-    current_run = 0
-    previous_qualifying_time: datetime | None = None
-    for index, observation in enumerate(observed):
-        if is_qualifying(observation, config):
-            gap = (
-                elapsed_minutes(
-                    observation.timestamp_local, previous_qualifying_time
-                )
-                if previous_qualifying_time is not None
-                else math.inf
-            )
-            current_run = (
-                current_run + 1
-                if gap <= config.maximum_consecutive_gap_minutes
-                else 1
-            )
-            longest_run = max(longest_run, current_run)
-            previous_qualifying_time = observation.timestamp_local
-            qualifying_minutes += held_minutes(
-                observed, index, effective_end, config.sample_hold_cap_minutes
-            )
-        else:
-            current_run = 0
-            previous_qualifying_time = None
-    event_seen = (
-        qualifying_minutes >= config.minimum_cumulative_minutes
-        and longest_run >= config.minimum_consecutive_samples
-    )
-    return {
-        "piou_wind_event_observations_so_far": float(len(observed)),
-        "piou_wind_event_qualifying_minutes_so_far": qualifying_minutes,
-        "piou_wind_event_longest_run_so_far": float(longest_run),
-        "piou_wind_event_observed_so_far": float(event_seen),
-    }
-
-
 def build_timestep_piou_rows(
     input_dir: Path,
     config: LabelConfig,
@@ -156,22 +118,34 @@ def build_timestep_piou_rows(
         )
         if daily_target is None:
             continue
+        onset = traverse_event_onset(
+            local_day, observations, config, daily_target
+        )
         for issue_minutes in issue_minutes_grid:
             cutoff = cutoff_for_minutes(local_day, issue_minutes, timezone_local)
+            if onset is not None and cutoff >= onset:
+                continue
             features = piou_features(
                 local_day, observations, config, cutoff_local=cutoff
             )
             if features is None:
                 continue
+            minutes_before_onset = (
+                elapsed_minutes(onset, cutoff) if onset is not None else float("nan")
+            )
+            anticipation_weight = (
+                min(minutes_before_onset / FULL_LEAD_WEIGHT_MINUTES, 1.0)
+                if onset is not None
+                else 1.0
+            )
             rows.append(
                 {
                     **calendar_features(local_day),
                     "issue_minutes": issue_minutes,
                     **issue_time_features(issue_minutes),
                     **features,
-                    **traverse_progress_features(
-                        local_day, observations, config, cutoff
-                    ),
+                    "meta_minutes_before_onset": minutes_before_onset,
+                    "meta_anticipation_weight": anticipation_weight,
                     **daily_target,
                 }
             )
@@ -460,6 +434,14 @@ def main() -> int:
         "date_range": [joined[0]["date"], joined[-1]["date"]],
         "label_config": config.__dict__,
         "weather_stations": [station.__dict__ for station in WEATHER_STATIONS],
+        "anticipation": {
+            "event_onset": "start_of_first_sustained_qualifying_run_on_positive_day",
+            "positive_rows_at_or_after_onset": "excluded",
+            "positive_row_weight": (
+                "min(minutes_before_onset / 180, 1)"
+            ),
+            "negative_row_weight": 1.0,
+        },
     }
     metadata_output = args.output.with_suffix(".metadata.json")
     metadata_output.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")

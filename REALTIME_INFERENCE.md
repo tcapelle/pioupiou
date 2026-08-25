@@ -2,13 +2,13 @@
 
 ## Conclusion
 
-All 98 inputs of the current same-day model can be constructed at prediction
+All 94 inputs of the current same-day model can be constructed at prediction
 time from two observation feeds and the local clock:
 
 | Feature family | Count | Source | Status |
 | --- | ---: | --- | --- |
 | `cal_` | 4 | Requested local date and time | Available locally |
-| `piou_` | 33 | OpenWindMap Windbird 2176 | Live and archive feeds verified |
+| `piou_` | 29 | OpenWindMap Windbird 2176 | Live and archive feeds verified |
 | `mf_` | 61 | Four Météo-France stations and thermal contrasts | Historical feeds verified; live token required |
 
 The root-level `realtime_inference.py` command implements this path with the
@@ -31,6 +31,11 @@ TRAVERSE_MODEL=artifacts/traverse_model.joblib \
 `scripts.prepare_timestep` remains the retrospective path backed by monthly
 PiouPiou CSV files and the historical Météo-France cache.
 
+The response separates the boosted model's advance probability from
+`onset_evidence`, the observed westerly wind component normalized by the target
+speed. The latter is an interpretable event-monitoring index, not a forecast
+probability.
+
 ## Time and leakage contract
 
 - The model scores any local minute from `06:30` through `19:59` in
@@ -46,10 +51,11 @@ PiouPiou CSV files and the historical Météo-France cache.
 - CHAMBERY-AIX requires a newest observation with finite temperature, humidity,
   wind speed, and wind direction no more than 90 minutes old. The three
   secondary stations require finite temperature with the same age limit.
-- The prediction window remains `[12:00, 20:00)` local time. After noon, the
-  model is partly a nowcast and includes candidate wind progress observed
-  before the issue time. The target also requires the eventual CHAMBERY-AIX
-  daily maximum to exceed 25°C.
+- The prediction window remains `[12:00, 20:00)` local time. The model was
+  trained only on positive rows before the onset of the first sustained
+  30-minute qualifying run; once such wind has begun, live observations should
+  be treated as event monitoring. The target also requires the eventual
+  CHAMBERY-AIX daily maximum to exceed 25°C.
 
 These boundaries are part of the trained model contract. A live implementation
 must not substitute receipt time for observation time or include observations
@@ -67,9 +73,8 @@ API endpoints:
   <https://api.pioupiou.fr/v1/archive/2176?start=last-day&stop=now>
 
 The archive endpoint, rather than the latest-observation endpoint alone, is
-required to construct rolling summaries and same-day Traverse progress. Fetch
-the last day and retain observations from `06:00` local time up to, but not
-including, the issue time.
+required to construct rolling summaries. Fetch the last day and retain
+observations from `06:00` local time up to, but not including, the issue time.
 
 The feed was checked on 2026-08-17. It was live and returned 287 observations
 over the preceding 24 hours, approximately one every five minutes. Its location
@@ -81,11 +86,11 @@ The archive supplies every raw value needed by the model:
 
 | API field | Use |
 | --- | --- |
-| `time` | Observation time, freshness, counts, trend and Traverse duration |
+| `time` | Observation time, freshness, counts, and trend |
 | `latitude`, `longitude` | Reject data when the sensor is not at the lake |
-| `wind_speed_avg` | Latest speed, rolling mean/max, trend and Traverse criterion |
+| `wind_speed_avg` | Latest speed, rolling mean/max, and trend |
 | `wind_speed_max` | Latest and rolling maximum gust, gust factor |
-| `wind_heading` | Direction encoding, west fraction/component and Traverse criterion |
+| `wind_heading` | Direction encoding and west fraction/component |
 | `wind_speed_min` | Parsed as part of the observation contract, but not used by the current model |
 | `pressure` | Not used; it was `null` when checked |
 
@@ -95,7 +100,7 @@ needed.
 
 ### Derived PiouPiou features
 
-The 33 `piou_` model inputs are all derived from the fields above:
+The 29 `piou_` model inputs are all derived from the fields above:
 
 - latest/freshness: `piou_last_age_minutes`, `piou_last_wind_avg_kmh`,
   `piou_last_wind_max_kmh`, `piou_last_heading_sin`, and
@@ -104,12 +109,7 @@ The 33 `piou_` model inputs are all derived from the fields above:
 - for each of `30m`, `1h`, and `3h`: mean and maximum average wind, maximum
   gust, west fraction, mean heading sine/cosine, and mean west component;
 - three-hour dynamics: `piou_wind_avg_trend_3h_kmh_per_hour` and
-  `piou_gust_factor_3h`;
-- observed candidate wind progress since noon:
-  `piou_wind_event_observations_so_far`,
-  `piou_wind_event_qualifying_minutes_so_far`,
-  `piou_wind_event_longest_run_so_far`, and
-  `piou_wind_event_observed_so_far`.
+  `piou_gust_factor_3h`.
 
 The exact rolling feature names are:
 
@@ -269,8 +269,8 @@ They are calculated from the requested date and minute in `Europe/Paris`.
    package for department 73.
 3. Select the configured station/location, normalize units, deduplicate by
    observation timestamp, and discard observations at or after the issue time.
-4. Reuse `piou_features`, `traverse_progress_features`, `weather_features`, and
-   the calendar feature functions to construct the row.
+4. Reuse `piou_features`, `weather_features`, and the calendar feature
+   functions to construct the row.
 5. Enforce the 30-minute PiouPiou and 90-minute Météo-France freshness limits.
 6. Bind the row to the feature names stored in the model artifact and score it
    with the existing prediction pipeline.

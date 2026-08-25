@@ -5,21 +5,27 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import sklearn
+from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
 from pioupiou.inference.model import (
+    anticipation_metrics,
+    anticipation_weights,
     build_pipeline,
     classification_metrics,
+    day_normalized_anticipation_weights,
     feature_names,
     fit_pipeline,
     load_artifact,
     load_artifact_with_sha256,
     load_dataset,
     numeric_feature_frame,
+    onset_evidence,
+    onset_evidence_metrics,
     predict_frame,
     save_model_bundle,
+    select_anticipation_threshold,
     select_threshold,
     train_and_evaluate,
 )
@@ -45,7 +51,7 @@ def save_fitted_model(path: Path, features: list[str]) -> None:
                     "library": "scikit-learn",
                     "library_version": sklearn.__version__,
                 },
-                "model": {"threshold": 0.5, "l2": 1.0, "C": 1.0},
+                "model": {"threshold": 0.5, "l2": 1.0},
             },
             "pipeline": pipeline,
         },
@@ -54,6 +60,83 @@ def save_fitted_model(path: Path, features: list[str]) -> None:
 
 
 class TraverseModelTests(unittest.TestCase):
+    def test_anticipation_metrics_count_event_and_false_alert_days(self):
+        frame = pd.DataFrame(
+            {
+                "date": pd.to_datetime(
+                    [
+                        "2024-01-01",
+                        "2024-01-01",
+                        "2024-01-02",
+                        "2024-01-02",
+                        "2024-01-03",
+                        "2024-01-03",
+                    ]
+                ),
+                "label": [1, 1, 1, 1, 0, 0],
+                "meta_minutes_before_onset": [240, 120, 150, 30, np.nan, np.nan],
+            }
+        )
+        metrics = anticipation_metrics(
+            frame,
+            np.array([0.8, 0.1, 0.8, 0.1, 0.2, 0.7]),
+            0.5,
+        )
+        self.assertEqual(metrics["event_alert_rate_lead_3h"], 0.5)
+        self.assertEqual(metrics["event_alert_rate_lead_2h"], 1.0)
+        self.assertEqual(metrics["event_alert_rate_lead_1h"], 1.0)
+        self.assertEqual(metrics["false_alert_day_rate"], 1.0)
+        self.assertEqual(metrics["median_warning_minutes"], 195.0)
+        self.assertIn("event_day_2h_average_precision", metrics)
+        self.assertIn("event_day_1h_average_precision", metrics)
+
+    def test_anticipation_weights_validate_the_dataset_contract(self):
+        frame = pd.DataFrame(
+            {
+                "label": [0, 1],
+                "meta_minutes_before_onset": [np.nan, 90.0],
+                "meta_anticipation_weight": [1.0, 0.5],
+            }
+        )
+        np.testing.assert_array_equal(
+            anticipation_weights(frame), np.array([1.0, 0.5])
+        )
+        frame.loc[1, "meta_minutes_before_onset"] = 0.0
+        with self.assertRaisesRegex(ValueError, "strictly before onset"):
+            anticipation_weights(frame)
+
+    def test_fit_weights_give_each_day_equal_total_weight(self):
+        frame = pd.DataFrame(
+            {
+                "date": pd.to_datetime(
+                    ["2024-01-01", "2024-01-01", "2024-01-02"]
+                ),
+                "label": [1, 1, 0],
+                "meta_minutes_before_onset": [180.0, 90.0, np.nan],
+                "meta_anticipation_weight": [1.0, 0.5, 1.0],
+            }
+        )
+        weights = day_normalized_anticipation_weights(frame)
+        np.testing.assert_allclose(weights, np.array([2 / 3, 1 / 3, 1.0]))
+        totals = pd.Series(weights).groupby(frame["date"]).sum()
+        np.testing.assert_allclose(totals.to_numpy(), np.ones(2))
+
+    def test_anticipation_threshold_operates_on_day_alerts(self):
+        frame = pd.DataFrame(
+            {
+                "date": pd.to_datetime(
+                    ["2024-01-01", "2024-01-01", "2024-01-02", "2024-01-02"]
+                ),
+                "label": [1, 1, 0, 0],
+                "meta_minutes_before_onset": [240, 120, np.nan, np.nan],
+            }
+        )
+        threshold = select_anticipation_threshold(
+            frame, np.array([0.8, 0.95, 0.2, 0.7])
+        )
+        self.assertGreater(threshold, 0.7)
+        self.assertLessEqual(threshold, 0.8)
+
     def test_metrics_confusion_counts(self):
         metrics = classification_metrics(
             np.array([0, 0, 1, 1]), np.array([0.1, 0.7, 0.8, 0.2]), 0.5
@@ -63,20 +146,46 @@ class TraverseModelTests(unittest.TestCase):
             [1, 1, 1, 1],
         )
 
-    def test_pipeline_imputes_scales_and_marks_missingness(self):
+    def test_pipeline_imputes_for_shallow_histogram_booster(self):
         features = ["a", "b"]
         train = pd.DataFrame({"a": [1.0, 2.0, np.nan, 4.0], "b": [3.0] * 4})
         pipeline = build_pipeline(1.0, features)
         fit_pipeline(pipeline, train, np.array([0, 0, 1, 1]))
-        transformed = pipeline.named_steps["preprocessor"].transform(
+        transformed = pipeline.named_steps["imputer"].transform(
             pd.DataFrame({"a": [np.nan], "b": [3.0]})
         )
-        values = pipeline.named_steps["preprocessor"].named_transformers_["values"]
         self.assertIsInstance(pipeline, Pipeline)
-        self.assertIsInstance(values.named_steps["imputer"], SimpleImputer)
-        self.assertIsInstance(pipeline.named_steps["classifier"], LogisticRegression)
-        self.assertEqual(transformed.shape, (1, 4))
-        self.assertEqual(list(transformed[0, 2:]), [1.0, 0.0])
+        self.assertIsInstance(pipeline.named_steps["imputer"], SimpleImputer)
+        self.assertIsInstance(
+            pipeline.named_steps["classifier"], HistGradientBoostingClassifier
+        )
+        self.assertEqual(transformed.shape, (1, 2))
+        self.assertTrue(np.isfinite(transformed).all())
+
+    def test_onset_evidence_is_normalized_westerly_component(self):
+        frame = pd.DataFrame(
+            {
+                "piou_last_wind_avg_kmh": [18.52, 18.52, 37.04, np.nan],
+                "piou_last_heading_sin": [-1.0, 1.0, -1.0, -1.0],
+            }
+        )
+        np.testing.assert_allclose(
+            onset_evidence(frame), np.array([1.0, 0.0, 1.0, 0.0])
+        )
+
+    def test_onset_evidence_metric_measures_each_event_trajectory(self):
+        frame = pd.DataFrame(
+            {
+                "date": pd.to_datetime(["2024-07-01"] * 3 + ["2024-07-02"] * 3),
+                "label": [1] * 6,
+                "issue_minutes": [720, 750, 780] * 2,
+                "meta_minutes_before_onset": [180, 150, 120] * 2,
+            }
+        )
+        metrics = onset_evidence_metrics(
+            frame, np.array([0.1, 0.2, 0.3, 0.3, 0.2, 0.1])
+        )
+        self.assertEqual(metrics["event_rising_onset_evidence_rate_final_6h"], 0.5)
 
     def test_feature_schema_keeps_only_selected_blocks(self):
         frame = pd.DataFrame(
@@ -168,6 +277,10 @@ class TraverseModelTests(unittest.TestCase):
             ],
         )
         self.assertNotIn("role", bundle["metadata"])
+        self.assertEqual(
+            bundle["metadata"]["model"]["fit_weighting"],
+            "equal_total_weight_per_day_within_day_lead_weight",
+        )
         self.assertEqual(metrics["test"]["rows"], 4.0)
 
     def test_joblib_round_trip_and_hash_check(self):

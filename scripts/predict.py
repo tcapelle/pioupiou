@@ -12,6 +12,7 @@ import pandas as pd
 
 from pioupiou.inference.model import (
     load_artifact_with_sha256,
+    onset_evidence,
     predict_loaded,
     sha256_file,
 )
@@ -103,7 +104,17 @@ def main() -> int:
                 "status": "ok",
                 "traverse_probability": float(probability[0]),
                 "predict_traverse": bool(predicted[0]),
-                "top_logit_contributions": [
+                "onset_evidence": float(
+                    onset_evidence(
+                        row,
+                        float(
+                            loaded_artifact[0]
+                            .get("label", {})
+                            .get("speed_threshold_kmh", 18.52)
+                        ),
+                    )[0]
+                ),
+                "model_contributions": [
                     {"feature": name, "contribution": value}
                     for name, value in contributions[0]
                 ],

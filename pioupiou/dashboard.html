@@ -38,8 +38,12 @@
     .grid { display: grid; grid-template-columns: minmax(330px, .82fr) minmax(0, 1.75fr); gap: 18px; }
     .probability-line { fill: none; stroke: var(--coral); stroke-width: 2.75; stroke-linejoin: round; stroke-linecap: round; }
     .probability-point { fill: var(--coral); stroke: white; stroke-width: 1.5; cursor: crosshair; }
+    .evidence-line { fill: none; stroke: var(--solar); stroke-width: 2.25; stroke-dasharray: 7 4; stroke-linejoin: round; stroke-linecap: round; }
+    .evidence-point { fill: var(--solar); stroke: white; stroke-width: 1.25; cursor: crosshair; }
     .probability-axis { fill: #a33e2c; }
     .threshold-line { stroke: var(--coral); stroke-width: 1.25; stroke-dasharray: 5 5; opacity: .65; }
+    .onset-line { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 3 4; opacity: .7; }
+    .onset-label { fill: var(--ink); font-size: 11px; font-weight: 650; }
     .temperature-line { fill: none; stroke: var(--amber); stroke-width: 2.25; stroke-linejoin: round; }
     .temperature-point { fill: var(--amber); stroke: white; stroke-width: 1.25; }
     .cloud-line { fill: none; stroke: var(--cloud); stroke-width: 2.25; stroke-linejoin: round; }
@@ -50,6 +54,10 @@
     .actual-pill.event { background: rgb(225 103 77 / 14%); color: #a33e2c; }
     .card { background: var(--card); border: 1px solid #e5e2d9; border-radius: 18px; box-shadow: 0 10px 32px rgb(38 57 62 / 7%); }
     .annual { padding: 24px; }
+    .model-summary { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+    .model-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; margin-top: 16px; }
+    .model-metrics span { color: var(--muted); font-size: 12px; }
+    .model-metrics b { display: block; color: var(--ink); font-size: 20px; font-weight: 650; }
     .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
     .section-head span { color: var(--muted); font-size: 13px; }
     #bars { height: 320px; display: flex; align-items: stretch; gap: 7px; margin-top: 22px; padding-top: 20px; border-bottom: 1px solid var(--line); }
@@ -85,6 +93,8 @@
     .swatch.range-key { background: var(--blue-pale); }
     .swatch.avg-key { height: 2px; background: var(--blue); vertical-align: 4px; }
     .swatch.prediction-key { height: 3px; background: var(--coral); vertical-align: 3px; }
+    .swatch.evidence-key { height: 3px; background: var(--solar); vertical-align: 3px; }
+    .swatch.onset-key { width: 2px; height: 12px; border-radius: 0; background: var(--ink); vertical-align: -2px; }
     .swatch.temperature-key { height: 3px; background: var(--amber); vertical-align: 3px; }
     .swatch.secondary-weather-key { height: 3px; background: var(--solar); vertical-align: 3px; }
     .status { padding: 80px 24px; text-align: center; color: var(--muted); }
@@ -119,6 +129,21 @@
           <span id="total-events"></span>
         </div>
         <div id="bars" aria-label="Traverse candidates per year"></div>
+        <div id="model-summary" class="model-summary" hidden>
+          <div class="section-head">
+            <h2 id="model-summary-title">Model results</h2>
+            <span>onset-aware</span>
+          </div>
+          <div class="model-metrics">
+            <span><b id="model-ap-3h">–</b>AP at ≥3 h lead</span>
+            <span><b id="model-ap-2h">–</b>AP at ≥2 h lead</span>
+            <span><b id="model-ap-1h">–</b>AP at ≥1 h lead</span>
+            <span><b id="model-alert">–</b>alerted ≥3 h early</span>
+            <span><b id="model-false-alert">–</b>false-alert days</span>
+            <span><b id="model-warning">–</b>median warning</span>
+            <span><b id="model-rising">–</b>events with rising onset evidence</span>
+          </div>
+        </div>
       </section>
 
       <section class="card detail">
@@ -129,7 +154,7 @@
               <h2 id="event-title">Event</h2>
               <div class="metrics">
                 <span><b id="peak-gust">–</b>peak gust</span>
-                <span><b id="qualifying">–</b>qualifying wind</span>
+                <span><b id="sustained">–</b>longest qualifying run</span>
                 <span><b id="coverage">–</b>coverage</span>
               </div>
             </div>
@@ -144,7 +169,7 @@
             <div class="legend">
               <span><i class="swatch range-key"></i>minimum–maximum</span>
               <span><i class="swatch avg-key"></i>average wind</span>
-              <span id="prediction-legend"><i class="swatch prediction-key"></i>model probability</span>
+              <span id="prediction-legend"><i class="swatch prediction-key"></i>advance probability · <i class="swatch evidence-key"></i>onset evidence · <i class="swatch onset-key"></i>event onset</span>
               <span><i class="swatch temperature-key"></i>temperature</span>
               <span><i id="secondary-weather-swatch" class="swatch secondary-weather-key"></i><span id="secondary-weather-label">solar radiation</span></span>
               <span>Needle points where the wind is blowing (N = north)</span>
@@ -213,7 +238,7 @@
       byId("next").disabled = state.eventIndex === state.yearEvents.length - 1;
       byId("event-title").innerHTML = `${localDate(event.date)} <span class="actual-pill${event.traverse ? " event" : ""}">${event.traverse ? "Traverse candidate" : "No rule match"}</span>`;
       byId("peak-gust").textContent = `${event.peak_gust_knots.toFixed(1)} kn`;
-      byId("qualifying").textContent = `${event.qualifying_minutes.toFixed(0)} min`;
+      byId("sustained").textContent = `${event.sustained_minutes.toFixed(0)} min`;
       byId("coverage").textContent = `${event.coverage.toFixed(0)}%`;
       renderChart(event);
     }
@@ -229,15 +254,15 @@
       const observations = event.observations.map(item => ({ ...item, date: new Date(item.time) }));
       const weather = (event.weather || []).map(item => ({ ...item, date: new Date(item.time) }));
       const predictionDay = state.data.predictions?.days.find(day => day.date === event.date);
-      const start = new Date(`${event.date}T06:30:00`);
-      const end = new Date(`${event.date}T20:00:00`);
+      const start = new Date(`${event.date}T12:00:00`);
+      const end = new Date(`${event.date}T21:00:00`);
       const x = date => left + (date - start) / (end - start) * chartWidth;
-      const xMinutes = minutes => left + (minutes - 390) / (1200 - 390) * chartWidth;
+      const xMinutes = minutes => left + (minutes - 720) / (1260 - 720) * chartWidth;
       const rawMax = Math.max(...observations.map(item => item.max));
       const yMaximum = Math.max(10, Math.ceil(rawMax / 5) * 5);
       const y = value => windBottom - value / yMaximum * (windBottom - windTop);
       const probabilityY = probability => windBottom - probability * (windBottom - windTop);
-      const tickHours = [7, 9, 11, 13, 15, 17, 19];
+      const tickHours = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
 
       tickHours.forEach(hour => {
         const when = new Date(`${event.date}T${String(hour).padStart(2, "0")}:00:00`);
@@ -267,18 +292,29 @@
         for (let value = 0; value <= 1.001; value += .25) {
           svg.append(svgNode("text", { x: width - right + 10, y: probabilityY(value) + 4, class: "axis-label probability-axis" }, `${Math.round(value * 100)}%`));
         }
-        svg.append(svgNode("text", { x: width - 5, y: 17, "text-anchor": "end", class: "axis-label probability-axis" }, "probability"));
+        svg.append(svgNode("text", { x: width - 5, y: 17, "text-anchor": "end", class: "axis-label probability-axis" }, "probability / evidence"));
         const threshold = Number(state.data.predictions.metadata.threshold);
         svg.append(svgNode("line", { x1: left, x2: width - right, y1: probabilityY(threshold), y2: probabilityY(threshold), class: "threshold-line" }));
         svg.append(svgNode("text", { x: width - right - 5, y: probabilityY(threshold) - 6, "text-anchor": "end", class: "axis-label probability-axis" }, "threshold"));
-        const predictionPoints = predictionDay.predictions.map(point => `${xMinutes(point.issue_minutes)},${probabilityY(point.probability)}`).join(" ");
+        const visiblePredictions = predictionDay.predictions.filter(point => point.issue_minutes >= 720 && point.issue_minutes <= 1260);
+        const predictionPoints = visiblePredictions.map(point => `${xMinutes(point.issue_minutes)},${probabilityY(point.probability)}`).join(" ");
         svg.append(svgNode("polyline", { points: predictionPoints, class: "probability-line" }));
-        predictionDay.predictions.forEach(point => {
+        const evidencePoints = visiblePredictions.map(point => `${xMinutes(point.issue_minutes)},${probabilityY(point.onset_evidence)}`).join(" ");
+        svg.append(svgNode("polyline", { points: evidencePoints, class: "evidence-line" }));
+        visiblePredictions.forEach(point => {
           const dot = svgNode("circle", { cx: xMinutes(point.issue_minutes), cy: probabilityY(point.probability), r: 4, class: "probability-point" });
           const hour = Math.floor(point.issue_minutes / 60), minute = point.issue_minutes % 60;
           dot.append(svgNode("title", {}, `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")} · ${(point.probability * 100).toFixed(1)}% Traverse probability`));
           svg.append(dot);
+          const evidenceDot = svgNode("circle", { cx: xMinutes(point.issue_minutes), cy: probabilityY(point.onset_evidence), r: 3.25, class: "evidence-point" });
+          evidenceDot.append(svgNode("title", {}, `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")} · ${(point.onset_evidence * 100).toFixed(1)}% of target westerly component`));
+          svg.append(evidenceDot);
         });
+        if (predictionDay.event_onset_minutes !== null) {
+          const onsetX = xMinutes(predictionDay.event_onset_minutes);
+          svg.append(svgNode("line", { x1: onsetX, x2: onsetX, y1: windTop, y2: directionY + 20, class: "onset-line" }));
+          svg.append(svgNode("text", { x: onsetX + 5, y: windTop + 13, class: "onset-label" }, "event onset"));
+        }
       }
 
       svg.append(svgNode("line", { x1: left, x2: width - right, y1: directionY, y2: directionY, class: "grid-line" }));
@@ -380,6 +416,18 @@
         const latest = new Date(data.metadata.latest_observation);
         byId("data-through").textContent = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(latest);
         byId("total-events").textContent = `${data.events.length} total`;
+        const metrics = data.predictions?.metadata?.metrics;
+        if (metrics?.event_day_3h_average_precision !== undefined) {
+          byId("model-summary").hidden = false;
+          byId("model-summary-title").textContent = `${data.predictions.metadata.year} model results`;
+          byId("model-ap-3h").textContent = metrics.event_day_3h_average_precision.toFixed(3);
+          byId("model-ap-2h").textContent = metrics.event_day_2h_average_precision.toFixed(3);
+          byId("model-ap-1h").textContent = metrics.event_day_1h_average_precision.toFixed(3);
+          byId("model-alert").textContent = `${(100 * metrics.event_alert_rate_lead_3h).toFixed(1)}%`;
+          byId("model-false-alert").textContent = `${(100 * metrics.false_alert_day_rate).toFixed(1)}%`;
+          byId("model-warning").textContent = `${(metrics.median_warning_minutes / 60).toFixed(1)} h`;
+          byId("model-rising").textContent = `${(100 * metrics.event_rising_onset_evidence_rate_final_6h).toFixed(1)}%`;
+        }
         byId("loading").hidden = true;
         byId("dashboard").hidden = false;
         selectYear(data.years.at(-1).year);
