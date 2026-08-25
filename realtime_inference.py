@@ -31,9 +31,12 @@ from pioupiou.data.timestep import (
     issue_time_features,
     station_weather_features,
     temperature_contrast_features,
-    traverse_progress_features,
 )
-from pioupiou.inference.model import load_artifact_with_sha256, predict_loaded
+from pioupiou.inference.model import (
+    load_artifact_with_sha256,
+    onset_evidence,
+    predict_loaded,
+)
 
 
 PIOU_URL = "https://api.pioupiou.fr/v1/archive/2176?start=last-day&stop=now"
@@ -186,9 +189,6 @@ def predict_now(
         **calendar_features(cutoff.date()),
         **issue_time_features(issue_minutes),
         **piou,
-        **traverse_progress_features(
-            cutoff.date(), piou_observations, config, cutoff
-        ),
         **meteo,
     }
     feature_names = list(payload["feature_names"])
@@ -213,6 +213,9 @@ def predict_now(
         },
         "traverse_probability": float(probability[0]),
         "predict_traverse": bool(predicted[0]),
+        "onset_evidence": float(
+            onset_evidence(frame, config.speed_threshold_kmh)[0]
+        ),
     }
 
 

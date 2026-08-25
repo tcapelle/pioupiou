@@ -52,6 +52,34 @@ class ObservationFeatureTests(unittest.TestCase):
         self.assertEqual(result["meta_target_wind_event"], 1)
         self.assertGreaterEqual(result["meta_target_qualifying_minutes"], 30.0)
         self.assertEqual(result["meta_target_longest_qualifying_run"], 8)
+        self.assertGreaterEqual(
+            result["meta_target_longest_qualifying_run_minutes"], 30.0
+        )
+
+    def test_target_rejects_qualifying_minutes_split_across_short_runs(self):
+        start = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)
+        first_run = [
+            observation(start + timedelta(minutes=5 * index))
+            for index in range(5)
+        ]
+        interruption = observation(
+            start + timedelta(minutes=25), speed=10.0
+        )
+        second_run = [
+            observation(start + timedelta(minutes=30 + 5 * index))
+            for index in range(3)
+        ]
+        result = target_label(
+            self.day,
+            [*first_run, interruption, *second_run],
+            self.config,
+            30.0,
+        )
+        self.assertGreaterEqual(result["meta_target_qualifying_minutes"], 30.0)
+        self.assertLess(
+            result["meta_target_longest_qualifying_run_minutes"], 30.0
+        )
+        self.assertEqual(result["label"], 0)
 
     def test_target_requires_hot_day_inside_may_through_september(self):
         start = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)

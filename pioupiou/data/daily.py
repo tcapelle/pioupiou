@@ -146,8 +146,7 @@ class LabelConfig:
     speed_threshold_kmh: float = 18.52
     heading_min_degrees: float = 225.0
     heading_max_degrees: float = 315.0
-    minimum_cumulative_minutes: float = 30.0
-    minimum_consecutive_samples: int = 3
+    minimum_sustained_minutes: float = 30.0
     maximum_consecutive_gap_minutes: float = 10.0
     sample_hold_cap_minutes: float = 5.0
     minimum_target_coverage: float = 0.75
@@ -206,8 +205,7 @@ def validate_label_config(config: LabelConfig) -> None:
         config.speed_threshold_kmh > 0
         and 0 <= config.heading_min_degrees <= 360
         and 0 <= config.heading_max_degrees <= 360
-        and config.minimum_cumulative_minutes > 0
-        and config.minimum_consecutive_samples >= 1
+        and config.minimum_sustained_minutes > 0
         and config.maximum_consecutive_gap_minutes > 0
         and config.sample_hold_cap_minutes > 0
         and 0 < config.minimum_target_coverage <= 1
@@ -234,7 +232,6 @@ def label_config_from_payload(payload: Any) -> LabelConfig:
     integer_fields = {
         "cutoff_hour",
         "target_end_hour",
-        "minimum_consecutive_samples",
         "piou_morning_start_hour",
         "weather_morning_start_hour",
         "season_start_month",
@@ -507,6 +504,65 @@ def is_traverse_season(local_day: date, config: LabelConfig) -> bool:
     return config.season_start_month <= local_day.month <= config.season_end_month
 
 
+def qualifying_wind_summary(
+    observations: Sequence[PiouObservation],
+    window_end: datetime,
+    config: LabelConfig,
+) -> dict[str, float | int | datetime | None]:
+    """Summarize qualifying wind and locate the first sustained event run."""
+    qualifying_minutes = 0.0
+    longest_run_samples = 0
+    longest_run_minutes = 0.0
+    current_run_samples = 0
+    current_run_minutes = 0.0
+    current_run_start: datetime | None = None
+    previous_qualifying_time: datetime | None = None
+    event_onset: datetime | None = None
+
+    for index, observation in enumerate(observations):
+        if not is_qualifying(observation, config):
+            current_run_samples = 0
+            current_run_minutes = 0.0
+            current_run_start = None
+            previous_qualifying_time = None
+            continue
+
+        gap = (
+            elapsed_minutes(
+                observation.timestamp_local, previous_qualifying_time
+            )
+            if previous_qualifying_time is not None
+            else math.inf
+        )
+        if gap > config.maximum_consecutive_gap_minutes:
+            current_run_samples = 0
+            current_run_minutes = 0.0
+            current_run_start = observation.timestamp_local
+
+        duration = held_minutes(
+            observations, index, window_end, config.sample_hold_cap_minutes
+        )
+        qualifying_minutes += duration
+        current_run_samples += 1
+        current_run_minutes += duration
+        previous_qualifying_time = observation.timestamp_local
+        longest_run_samples = max(longest_run_samples, current_run_samples)
+        longest_run_minutes = max(longest_run_minutes, current_run_minutes)
+
+        if (
+            event_onset is None
+            and current_run_minutes >= config.minimum_sustained_minutes
+        ):
+            event_onset = current_run_start
+
+    return {
+        "qualifying_minutes": qualifying_minutes,
+        "longest_run_samples": longest_run_samples,
+        "longest_run_minutes": longest_run_minutes,
+        "event_onset": event_onset,
+    }
+
+
 def target_label(
     local_day: date,
     observations: Sequence[PiouObservation],
@@ -538,30 +594,8 @@ def target_label(
     if coverage_fraction < config.minimum_target_coverage:
         return None
 
-    qualifying_minutes = 0.0
-    longest_run = 0
-    current_run = 0
-    previous_qualifying_time: datetime | None = None
-    for index, observation in enumerate(target):
-        if is_qualifying(observation, config):
-            gap = (
-                elapsed_minutes(observation.timestamp_local, previous_qualifying_time)
-                if previous_qualifying_time is not None
-                else math.inf
-            )
-            current_run = current_run + 1 if gap <= config.maximum_consecutive_gap_minutes else 1
-            longest_run = max(longest_run, current_run)
-            previous_qualifying_time = observation.timestamp_local
-            qualifying_minutes += held_minutes(
-                target, index, end, config.sample_hold_cap_minutes
-            )
-        else:
-            current_run = 0
-            previous_qualifying_time = None
-    wind_event = (
-        qualifying_minutes >= config.minimum_cumulative_minutes
-        and longest_run >= config.minimum_consecutive_samples
-    )
+    wind = qualifying_wind_summary(target, end, config)
+    wind_event = wind["event_onset"] is not None
     hot_day = daily_max_temperature_c > config.hot_day_temperature_threshold_c
     return {
         "label": int(hot_day and wind_event),
@@ -570,8 +604,11 @@ def target_label(
         "meta_target_wind_event": int(wind_event),
         "meta_target_observations": len(target),
         "meta_target_coverage_fraction": coverage_fraction,
-        "meta_target_qualifying_minutes": qualifying_minutes,
-        "meta_target_longest_qualifying_run": longest_run,
+        "meta_target_qualifying_minutes": float(wind["qualifying_minutes"]),
+        "meta_target_longest_qualifying_run": int(wind["longest_run_samples"]),
+        "meta_target_longest_qualifying_run_minutes": float(
+            wind["longest_run_minutes"]
+        ),
     }
 
 

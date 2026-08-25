@@ -12,16 +12,13 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 import tempfile
 from typing import Any
-import warnings
 
 import joblib
 import numpy as np
 import pandas as pd
 import sklearn
-from sklearn.compose import ColumnTransformer
-from sklearn.exceptions import ConvergenceWarning
-from sklearn.impute import MissingIndicator, SimpleImputer
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
@@ -37,11 +34,11 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 
 
 FEATURE_PREFIXES = ("cal_", "piou_", "mf_")
 RANDOM_STATE = 20260807
+DEFAULT_TRAVERSE_SPEED_KMH = 10.0 * 1.852
 
 
 def sha256_file(path: Path | str) -> str:
@@ -58,7 +55,10 @@ def sha256_json(value: object) -> str:
 
 
 def classification_metrics(
-    y_true: np.ndarray, probabilities: np.ndarray, threshold: float
+    y_true: np.ndarray,
+    probabilities: np.ndarray,
+    threshold: float,
+    sample_weight: np.ndarray | None = None,
 ) -> dict[str, float]:
     y = np.asarray(y_true, dtype=int)
     probabilities = np.asarray(probabilities, dtype=float)
@@ -68,7 +68,7 @@ def classification_metrics(
     specificity = tn / (tn + fp) if tn + fp else 0.0
     curve_precision, curve_recall, _ = precision_recall_curve(y, probabilities)
     eligible_precision = curve_precision[curve_recall >= 0.60]
-    return {
+    metrics = {
         "rows": float(len(y)),
         "prevalence": float(np.mean(y)) if len(y) else float("nan"),
         "average_precision": float(average_precision_score(y, probabilities)),
@@ -95,9 +95,29 @@ def classification_metrics(
         "tn": float(tn),
         "fn": float(fn),
     }
+    if sample_weight is not None:
+        weight = np.asarray(sample_weight, dtype=float)
+        metrics.update(
+            {
+                "lead_weighted_average_precision": float(
+                    average_precision_score(y, probabilities, sample_weight=weight)
+                ),
+                "lead_weighted_brier_score": float(
+                    brier_score_loss(y, probabilities, sample_weight=weight)
+                ),
+                "lead_weighted_log_loss": float(
+                    log_loss(y, probabilities, labels=[0, 1], sample_weight=weight)
+                ),
+            }
+        )
+    return metrics
 
 
-def select_threshold(y_true: np.ndarray, probabilities: np.ndarray) -> float:
+def select_threshold(
+    y_true: np.ndarray,
+    probabilities: np.ndarray,
+    sample_weight: np.ndarray | None = None,
+) -> float:
     """Choose the validation threshold with best balanced accuracy, then F1."""
     candidates = np.unique(np.r_[0.0, probabilities, 1.0])
     best_threshold = 0.5
@@ -106,8 +126,19 @@ def select_threshold(y_true: np.ndarray, probabilities: np.ndarray) -> float:
     for threshold in candidates:
         predicted = (probabilities >= threshold).astype(int)
         key = (
-            float(balanced_accuracy_score(y, predicted)),
-            float(f1_score(y, predicted, zero_division=0)),
+            float(
+                balanced_accuracy_score(
+                    y, predicted, sample_weight=sample_weight
+                )
+            ),
+            float(
+                f1_score(
+                    y,
+                    predicted,
+                    sample_weight=sample_weight,
+                    zero_division=0,
+                )
+            ),
             -abs(float(threshold) - 0.5),
         )
         if key > best_key:
@@ -128,38 +159,21 @@ def build_pipeline(l2: float, feature_names: Sequence[str]) -> Pipeline:
     names = list(feature_names)
     if not names:
         raise ValueError("At least one feature is required")
-    values = Pipeline(
+    return Pipeline(
         steps=[
             (
                 "imputer",
                 SimpleImputer(strategy="median", keep_empty_features=True),
             ),
-            ("scaler", StandardScaler()),
-        ]
-    )
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("values", values, names),
-            (
-                "missing",
-                MissingIndicator(features="all", sparse=False),
-                names,
-            ),
-        ],
-        remainder="drop",
-        sparse_threshold=0.0,
-    )
-    return Pipeline(
-        steps=[
-            ("preprocessor", preprocessor),
             (
                 "classifier",
-                LogisticRegression(
-                    penalty="l2",
-                    C=1.0 / float(l2),
-                    solver="lbfgs",
-                    max_iter=3000,
-                    tol=1e-8,
+                HistGradientBoostingClassifier(
+                    max_iter=200,
+                    learning_rate=0.05,
+                    max_leaf_nodes=7,
+                    min_samples_leaf=100,
+                    l2_regularization=float(l2),
+                    early_stopping=False,
                     random_state=RANDOM_STATE,
                 ),
             ),
@@ -168,23 +182,24 @@ def build_pipeline(l2: float, feature_names: Sequence[str]) -> Pipeline:
 
 
 def fit_pipeline(
-    pipeline: Pipeline, frame: pd.DataFrame, target: np.ndarray
+    pipeline: Pipeline,
+    frame: pd.DataFrame,
+    target: np.ndarray,
+    sample_weight: np.ndarray | None = None,
 ) -> Pipeline:
-    """Fit and fail loudly if sklearn cannot converge or yields non-finite state."""
-    with warnings.catch_warnings():
-        warnings.filterwarnings("error", category=ConvergenceWarning)
-        # Apple's Accelerate BLAS can emit spurious matmul floating-point warnings
-        # while lbfgs explores trial weights. Validate the fitted state explicitly.
-        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-            pipeline.fit(frame, target)
-    transformed = pipeline.named_steps["preprocessor"].transform(frame)
-    classifier = pipeline.named_steps["classifier"]
+    """Fit and fail loudly if preprocessing or probabilities are non-finite."""
+    fit_parameters = (
+        {"classifier__sample_weight": sample_weight}
+        if sample_weight is not None
+        else {}
+    )
+    pipeline.fit(frame, target, **fit_parameters)
+    transformed = pipeline.named_steps["imputer"].transform(frame)
     if not np.isfinite(transformed).all():
         raise ValueError("Non-finite values remain after sklearn preprocessing")
-    if not np.isfinite(classifier.coef_).all() or not np.isfinite(
-        classifier.intercept_
-    ).all():
-        raise ValueError("The fitted sklearn classifier contains non-finite parameters")
+    probability = pipeline.predict_proba(frame)[:, 1]
+    if not np.isfinite(probability).all():
+        raise ValueError("The fitted sklearn classifier produced non-finite probabilities")
     return pipeline
 
 
@@ -212,6 +227,224 @@ def feature_names(frame: pd.DataFrame) -> list[str]:
     return names
 
 
+def onset_evidence(
+    frame: pd.DataFrame,
+    speed_threshold_kmh: float = DEFAULT_TRAVERSE_SPEED_KMH,
+) -> np.ndarray:
+    """Latest local westerly component as a 0–1 fraction of Traverse speed."""
+    if speed_threshold_kmh <= 0:
+        raise ValueError("Traverse speed threshold must be positive")
+    required = {"piou_last_wind_avg_kmh", "piou_last_heading_sin"}
+    missing = sorted(required.difference(frame.columns))
+    if missing:
+        raise ValueError(f"Onset evidence requires columns: {missing}")
+    speed = pd.to_numeric(
+        frame["piou_last_wind_avg_kmh"], errors="coerce"
+    ).to_numpy(dtype=float)
+    heading_sin = pd.to_numeric(
+        frame["piou_last_heading_sin"], errors="coerce"
+    ).to_numpy(dtype=float)
+    evidence = speed * np.clip(-heading_sin, 0.0, 1.0) / speed_threshold_kmh
+    evidence[~np.isfinite(evidence)] = 0.0
+    return np.clip(evidence, 0.0, 1.0)
+
+
+def onset_evidence_metrics(
+    frame: pd.DataFrame, evidence: np.ndarray
+) -> dict[str, float]:
+    """Measure whether physical onset evidence rises during an event's final 6 h."""
+    required = {"date", "label", "issue_minutes", "meta_minutes_before_onset"}
+    if not required.issubset(frame.columns):
+        return {}
+    scored = frame.loc[:, list(required)].copy()
+    scored["onset_evidence"] = np.asarray(evidence, dtype=float)
+    scored = scored[
+        (scored["label"] == 1)
+        & (scored["meta_minutes_before_onset"] <= 360)
+    ]
+    slopes: list[float] = []
+    for _, day in scored.groupby("date", sort=False):
+        finite = day[np.isfinite(day["onset_evidence"])]
+        if len(finite) < 3 or finite["issue_minutes"].nunique() < 2:
+            continue
+        slope_per_minute = np.polyfit(
+            finite["issue_minutes"].to_numpy(dtype=float),
+            finite["onset_evidence"].to_numpy(dtype=float),
+            1,
+        )[0]
+        slopes.append(float(slope_per_minute * 60.0))
+    if not slopes:
+        return {}
+    values = np.asarray(slopes)
+    return {
+        "events_with_onset_evidence_slope": float(len(values)),
+        "event_rising_onset_evidence_rate_final_6h": float(np.mean(values > 0)),
+        "median_onset_evidence_slope_per_hour_final_6h": float(np.median(values)),
+    }
+
+
+def anticipation_weights(frame: pd.DataFrame) -> np.ndarray:
+    """Return validated lead-time weights, or uniform weights for daily data."""
+    if "meta_anticipation_weight" not in frame.columns:
+        return np.ones(len(frame), dtype=float)
+    weights = pd.to_numeric(
+        frame["meta_anticipation_weight"], errors="coerce"
+    ).to_numpy(dtype=float)
+    if not np.isfinite(weights).all() or np.any(weights <= 0) or np.any(weights > 1):
+        raise ValueError("Anticipation weights must be finite and in (0, 1]")
+    if {"label", "meta_minutes_before_onset"}.issubset(frame.columns):
+        labels = pd.to_numeric(frame["label"], errors="coerce").to_numpy(dtype=float)
+        lead = pd.to_numeric(
+            frame["meta_minutes_before_onset"], errors="coerce"
+        ).to_numpy(dtype=float)
+        positive = labels == 1
+        if not np.isfinite(lead[positive]).all() or np.any(lead[positive] <= 0):
+            raise ValueError("Positive anticipation rows must be strictly before onset")
+        if np.isfinite(lead[~positive]).any():
+            raise ValueError("Negative anticipation rows must not have an event onset")
+        expected = np.ones(len(frame), dtype=float)
+        expected[positive] = np.minimum(lead[positive] / 180.0, 1.0)
+        if not np.allclose(weights, expected, rtol=0.0, atol=1e-12):
+            raise ValueError("Anticipation weights do not match the lead-time policy")
+    return weights
+
+
+def day_normalized_anticipation_weights(frame: pd.DataFrame) -> np.ndarray:
+    """Give every day equal fit weight while preserving within-day lead value."""
+    weights = anticipation_weights(frame)
+    if "date" not in frame.columns:
+        return weights
+    day_totals = pd.Series(weights, index=frame.index).groupby(
+        frame["date"], sort=False
+    ).transform("sum").to_numpy(dtype=float)
+    if not np.isfinite(day_totals).all() or np.any(day_totals <= 0):
+        raise ValueError("Each training day must have positive finite total weight")
+    return weights / day_totals
+
+
+def anticipation_metrics(
+    frame: pd.DataFrame, probabilities: np.ndarray, threshold: float
+) -> dict[str, float]:
+    """Summarize warning performance by event day instead of pooled rows."""
+    required = {"date", "label", "meta_minutes_before_onset"}
+    if not required.issubset(frame.columns):
+        return {}
+    scored = frame.loc[:, ["date", "label", "meta_minutes_before_onset"]].copy()
+    scored["alert"] = np.asarray(probabilities, dtype=float) >= threshold
+    positive = scored[scored["label"] == 1]
+    negative = scored[scored["label"] == 0]
+    positive_days = positive["date"].nunique()
+    negative_days = negative["date"].nunique()
+    output = {
+        "positive_days": float(positive_days),
+        "negative_days": float(negative_days),
+    }
+    for hours in (3, 2, 1):
+        qualifying_alerts = positive[
+            positive["alert"]
+            & (positive["meta_minutes_before_onset"] >= hours * 60)
+        ]
+        output[f"event_alert_rate_lead_{hours}h"] = (
+            float(qualifying_alerts["date"].nunique() / positive_days)
+            if positive_days
+            else float("nan")
+        )
+    false_alert_days = negative.loc[negative["alert"], "date"].nunique()
+    output["false_alert_day_rate"] = (
+        float(false_alert_days / negative_days)
+        if negative_days
+        else float("nan")
+    )
+    alerted_positive = positive[positive["alert"]]
+    warning_by_day = alerted_positive.groupby("date")[
+        "meta_minutes_before_onset"
+    ].max()
+    output["event_alert_rate_any_lead"] = (
+        float(len(warning_by_day) / positive_days)
+        if positive_days
+        else float("nan")
+    )
+    output["median_warning_minutes"] = (
+        float(warning_by_day.median()) if len(warning_by_day) else float("nan")
+    )
+    for hours in (3, 2, 1):
+        day_labels, day_scores = day_alert_scores(
+            frame, probabilities, minimum_lead_minutes=hours * 60
+        )
+        output[f"event_day_{hours}h_average_precision"] = float(
+            average_precision_score(day_labels, day_scores)
+        )
+        output[f"event_day_{hours}h_roc_auc"] = (
+            float(roc_auc_score(day_labels, day_scores))
+            if np.unique(day_labels).size == 2
+            else float("nan")
+        )
+    output["event_day_3h_balanced_accuracy"] = 0.5 * (
+        output["event_alert_rate_lead_3h"]
+        + 1.0
+        - output["false_alert_day_rate"]
+    )
+    if {"piou_last_wind_avg_kmh", "piou_last_heading_sin"}.issubset(frame.columns):
+        output.update(onset_evidence_metrics(frame, onset_evidence(frame)))
+    return output
+
+
+def day_alert_scores(
+    frame: pd.DataFrame,
+    probabilities: np.ndarray,
+    minimum_lead_minutes: float = 180.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Reduce timestep probabilities to one operational alert score per day."""
+    required = {"date", "label", "meta_minutes_before_onset"}
+    if not required.issubset(frame.columns):
+        raise ValueError("Day alert scores require onset-aware timestep rows")
+    scored = frame.loc[:, ["date", "label", "meta_minutes_before_onset"]].copy()
+    scored["probability"] = np.asarray(probabilities, dtype=float)
+    labels: list[int] = []
+    scores: list[float] = []
+    for _, day in scored.groupby("date", sort=True):
+        label = int(day["label"].iloc[0])
+        if label == 1:
+            eligible = day[
+                day["meta_minutes_before_onset"] >= minimum_lead_minutes
+            ]
+            score = (
+                float(eligible["probability"].max())
+                if len(eligible)
+                else -1.0
+            )
+        else:
+            score = float(day["probability"].max())
+        labels.append(label)
+        scores.append(score)
+    return np.asarray(labels, dtype=int), np.asarray(scores, dtype=float)
+
+
+def select_anticipation_threshold(
+    frame: pd.DataFrame,
+    probabilities: np.ndarray,
+    minimum_lead_minutes: float = 180.0,
+) -> float:
+    """Balance event-day advance alerts against false-alert days."""
+    labels, scores = day_alert_scores(
+        frame, probabilities, minimum_lead_minutes
+    )
+    candidates = np.unique(np.r_[0.0, scores[scores >= 0], 1.0])
+    best_threshold = 0.5
+    best_key = (-math.inf, -math.inf, -math.inf)
+    for threshold in candidates:
+        predicted = (scores >= threshold).astype(int)
+        key = (
+            float(balanced_accuracy_score(labels, predicted)),
+            float(f1_score(labels, predicted, zero_division=0)),
+            -abs(float(threshold) - 0.5),
+        )
+        if key > best_key:
+            best_key = key
+            best_threshold = float(threshold)
+    return best_threshold
+
+
 def expanding_year_l2_search(
     training: pd.DataFrame,
     feature_names: Sequence[str],
@@ -232,11 +465,24 @@ def expanding_year_l2_search(
                 pipeline,
                 numeric_feature_frame(fold_train, feature_names),
                 fold_train["label"].to_numpy(dtype=int),
+                day_normalized_anticipation_weights(fold_train),
             )
             probability = predict_probabilities(pipeline, fold_valid, feature_names)
-            fold_scores.append(
-                float(average_precision_score(fold_valid["label"].to_numpy(), probability))
-            )
+            if "meta_minutes_before_onset" in fold_valid.columns:
+                labels, day_scores = day_alert_scores(fold_valid, probability)
+                fold_scores.append(
+                    float(average_precision_score(labels, day_scores))
+                )
+            else:
+                fold_scores.append(
+                    float(
+                        average_precision_score(
+                            fold_valid["label"].to_numpy(),
+                            probability,
+                            sample_weight=anticipation_weights(fold_valid),
+                        )
+                    )
+                )
         scores[str(candidate)] = float(np.mean(fold_scores)) if fold_scores else float("nan")
     finite = [
         (score, -float(candidate), float(candidate))
@@ -314,38 +560,55 @@ def train_and_evaluate(
         pipeline,
         numeric_feature_frame(train, selected_features),
         train["label"].to_numpy(dtype=int),
+        day_normalized_anticipation_weights(train),
     )
     validation_probability = predict_probabilities(
         pipeline, validation, selected_features
     )
-    threshold = select_threshold(validation["label"].to_numpy(), validation_probability)
-    metrics = {
-        split_name: classification_metrics(
-            subset["label"].to_numpy(dtype=int),
-            predict_probabilities(pipeline, subset, selected_features),
-            threshold,
+    threshold = (
+        select_anticipation_threshold(validation, validation_probability)
+        if "meta_minutes_before_onset" in validation.columns
+        else select_threshold(
+            validation["label"].to_numpy(),
+            validation_probability,
+            anticipation_weights(validation),
         )
-        for split_name, subset in (
-            ("train", train),
-            ("validation", validation),
-            ("test", test),
-        )
-    }
+    )
+    metrics = {}
+    for split_name, subset in (
+        ("train", train),
+        ("validation", validation),
+        ("test", test),
+    ):
+        probability = predict_probabilities(pipeline, subset, selected_features)
+        metrics[split_name] = {
+            **classification_metrics(
+                subset["label"].to_numpy(dtype=int),
+                probability,
+                threshold,
+                anticipation_weights(subset),
+            ),
+            **anticipation_metrics(subset, probability, threshold),
+        }
     for year in sorted(test["year"].unique()):
         subset = test[test["year"] == year]
         metrics[f"test_{int(year)}"] = classification_metrics(
             subset["label"].to_numpy(dtype=int),
             predict_probabilities(pipeline, subset, selected_features),
             threshold,
+            anticipation_weights(subset),
         )
     if "issue_minutes" in test.columns:
         for issue_minutes in sorted(test["issue_minutes"].unique()):
             subset = test[test["issue_minutes"] == issue_minutes]
+            if subset["label"].nunique() < 2:
+                continue
             hour, minute = divmod(int(issue_minutes), 60)
             metrics[f"test_time_{hour:02d}{minute:02d}"] = classification_metrics(
                 subset["label"].to_numpy(dtype=int),
                 predict_probabilities(pipeline, subset, selected_features),
                 threshold,
+                anticipation_weights(subset),
             )
     classifier = pipeline.named_steps["classifier"]
     metadata = {
@@ -356,21 +619,24 @@ def train_and_evaluate(
             "library": "scikit-learn",
             "library_version": sklearn.__version__,
             "pipeline": [
-                "ColumnTransformer(values, missingness)",
                 "SimpleImputer(strategy='median', keep_empty_features=True)",
-                "StandardScaler(values_only)",
-                "MissingIndicator(features='all')",
-                "LogisticRegression(penalty='l2', solver='lbfgs')",
+                "HistGradientBoostingClassifier(max_leaf_nodes=7)",
             ],
             "random_state": RANDOM_STATE,
         },
         "model": {
             "threshold": threshold,
             "l2": best_l2,
-            "C": 1.0 / best_l2,
-            "iterations": int(np.max(classifier.n_iter_)),
+            "iterations": int(classifier.n_iter_),
+            "learning_rate": float(classifier.learning_rate),
+            "max_leaf_nodes": int(classifier.max_leaf_nodes),
+            "min_samples_leaf": int(classifier.min_samples_leaf),
+            "fit_weighting": "equal_total_weight_per_day_within_day_lead_weight",
         },
-        "selection": {"l2_average_precision_by_candidate": cv_scores},
+        "selection": {
+            "l2_event_day_3h_average_precision_by_candidate": cv_scores,
+            "selection_data": "expanding_year_folds_within_training_years_only",
+        },
         "split": {
             "train_years": sorted(int(value) for value in train["year"].unique()),
             "validation_years": sorted(int(value) for value in validation["year"].unique()),
@@ -530,15 +796,9 @@ def predict_loaded(
     probability = predict_probabilities(pipeline, numeric, feature_names)
     threshold = float(payload["model"]["threshold"])
     predicted = probability >= threshold
-    preprocessor = pipeline.named_steps["preprocessor"]
-    transformed = preprocessor.transform(numeric)
-    transformed_names = preprocessor.get_feature_names_out()
-    coefficients = pipeline.named_steps["classifier"].coef_[0]
-    contribution_rows: list[list[tuple[str, float]]] = []
-    for transformed_row in transformed:
-        contributions = list(zip(transformed_names, transformed_row * coefficients))
-        contributions.sort(key=lambda item: abs(item[1]), reverse=True)
-        contribution_rows.append([(str(name), float(value)) for name, value in contributions[:8]])
+    # Exact signed logit contributions are a property of the previous linear model.
+    # Keep the response shape stable while avoiding misleading tree attributions.
+    contribution_rows: list[list[tuple[str, float]]] = [[] for _ in range(len(frame))]
     return probability, predicted, contribution_rows
 
 

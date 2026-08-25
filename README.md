@@ -1,51 +1,63 @@
 # Same-day Traverse predictor
 
-This repository contains one research model: the probability that a qualifying
-Traverse occurs during today's fixed `[12:00, 20:00)` local window on a hot day
-from May through September, given all observations available at the requested
-time. Dates outside May–September are outside the model population.
+This repository contains one research model: an advance warning that a
+qualifying Traverse will begin later in today's fixed `[12:00, 20:00)` local
+window on a hot day from May through September, given observations available
+at the requested time. Dates outside May–September are outside the model
+population.
 
-The model can score any minute from 06:30 through 19:59. It is a forecast before
-the event window and increasingly a nowcast afterward; late scores may include
-direct evidence that a Traverse has already occurred.
+The model can score any minute from 06:30 through 19:59, but it is trained as an
+anticipation model rather than a nowcast. On a retrospectively positive day,
+event onset is the start of the first qualifying run that sustains 30 minutes.
+Rows at or after onset are excluded. Earlier positive rows receive weight
+`min(minutes_before_onset / 180, 1)`, so a prediction at least three hours early
+has full training value and one five minutes early has very little.
 
 ## Model
 
-The estimator is an L2-regularized scikit-learn logistic regression with median
-imputation, standardization, and explicit missingness indicators. Its features
-are limited to:
+The advance-risk estimator is a deliberately shallow scikit-learn histogram
+gradient booster with median imputation (seven leaves, 200 iterations). Its
+features are limited to:
 
 - seasonal and issue-time sine/cosine encodings;
 - recent PiouPiou wind speed, gust, direction, trend, and freshness summaries;
-- progress toward today's candidate wind criterion before the requested time;
 - recent observations from the primary CHAMBERY-AIX Météo-France station;
 - temperature summaries from BELLEY, NOVALAISE, and MONT DU CHAT; and
 - explicit lowland, lake-side, and ridge temperature contrasts.
 
 All observations at or after the requested time are excluded. The chronological
-split is 2017–2022 training, 2023 validation, and 2024–2025 test. The selected
-model uses `L2=10` (`C=0.1`) and a validation-selected decision threshold of
-`0.13411`.
+split is 2017–2022 training, 2023 validation, and 2024–2025 test.
+L2 regularization is selected by event-day average precision at least three
+hours before onset. The threshold balances three-hour event alerts against
+false-alert days on validation data. The selected model uses `L2=10` and
+threshold `0.27567`. Fit weights preserve the lead-time value within each
+day, then normalize every day to equal total weight so days with more available
+checkpoints do not dominate training.
 
-Held-out average precision was 0.2765 at 06:30, 0.4235 at noon, 0.4317 at 14:00,
-0.5156 at 16:00, 0.6074 at 18:00, and 0.7042 at 19:30. Overall held-out average
-precision was 0.3982. See the
-[current experiment record](experiments/20260818-hot-season-multistation/plan.md)
-for the complete interpretation and metrics. The earlier wind-only target is
-preserved in the
-[original experiment record](experiments/20260816-same-day-timesteps/plan.md).
+On the chronological 2024–2025 test years, three-hour event-day AP is `0.190`, ROC
+AUC is `0.717`, and false-alert days are `14.8%`; `34.8%` of events are alerted
+at least three hours early. On the later partial 2026 season, AP is `0.231`, AUC
+is `0.655`, false-alert days are `14.5%`, and the model alerts `30.0%` (3/10) at
+least three hours early. Compared with the preceding linear model, ranking
+improves and 2026 false alerts are halved, while 2024–2025 thresholded event
+coverage is lower. See the
+[current experiment record](experiments/20260818-hot-season-anticipation/plan.md)
+for the complete interpretation and the earlier
+[target](experiments/20260818-hot-season-multistation/plan.md) and
+[anticipation](experiments/20260817-lead-time-anticipation/plan.md) records for
+the experiment history.
 
 ## Build, train, and test
 
 Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
 
 ```bash
-uv sync
-uv run python -m scripts.build_timestep_dataset --offline
-uv run python -m scripts.train \
+uv sync --frozen
+uv run --frozen python -m scripts.build_timestep_dataset --offline
+uv run --frozen python -m scripts.train \
   --wandb-name same-day-traverse \
   --wandb-mode disabled
-uv run python -m unittest discover -v
+uv run --frozen python -m unittest discover -v
 ```
 
 Remove `--offline` on the first dataset build to fetch and filter the required
@@ -73,9 +85,12 @@ uv run python -m scripts.predict \
   --features artifacts/timestep_features.csv
 ```
 
-The JSON response includes the probability, thresholded decision, and largest
-signed contributions to the model logit. Contributions describe this model;
-they are not causal explanations.
+The JSON response includes the probability, thresholded decision, and a
+separate `onset_evidence` value: the latest westerly wind component as a
+fraction of the 18.52 km/h target, clipped to `[0, 1]`. This physical evidence
+index is not a second probability. Once qualifying wind has begun, treat the
+live observations as event monitoring rather than interpreting a later score
+as advance warning.
 
 With `METEOFRANCE_TOKEN` set, serve the current live prediction at
 `GET /predict`:
@@ -87,11 +102,15 @@ TRAVERSE_MODEL=artifacts/traverse_model.joblib \
 
 The same server exposes a historical dashboard at
 `http://127.0.0.1:8000/dashboard`. It shows wind-rule Traverse candidates by
-year and a shared 06:30–20:00 timeline with wind in knots, flow-direction
-needles, model probability, CHAMBERY-AIX temperature, and either cloud cover or
-solar radiation when cloud cover is unavailable. Rule matches are candidates,
-not independently confirmed Traverse observations. Dashboard data is built
-from the local archives on first load and then cached in memory.
+year and a shared 12:00–21:00 timeline with wind in knots, flow-direction
+needles, advance probability, physical onset evidence, the event-onset boundary,
+CHAMBERY-AIX temperature, and either cloud cover or solar radiation when cloud
+cover is unavailable. The 2026 view also compares event-day AP at three-, two-,
+and one-hour lead, and summarizes early-alert rate, false-alert days, median
+warning time, and the share of events whose onset evidence rises over the final
+six hours. Rule matches are candidates, not independently confirmed Traverse
+observations. Dashboard data is built from
+the local archives on first load and then cached in memory.
 
 `joblib` uses pickle semantics. Load only trusted model bundles. A downloaded
 artifact can be checked before deserialization with `--model-sha256`.
@@ -124,14 +143,14 @@ Refresh the current Windbird archive month by month (the API rejects overly
 large ranges):
 
 ```bash
-uv run python -m scripts.fetch_piou_archive --station-id 2176 --year 2026
+uv run --frozen python -m scripts.fetch_piou_archive --station-id 2176 --year 2026
 
 # Rebuild the feature table; the chronological split still trains on 2017–2022.
-uv run python -m scripts.build_timestep_dataset
-uv run python -m scripts.train \
+uv run --frozen python -m scripts.build_timestep_dataset
+uv run --frozen python -m scripts.train \
   --wandb-name 2026-holdout-dashboard \
   --wandb-mode disabled
-uv run python -m scripts.predict_dataset \
+uv run --frozen python -m scripts.predict_dataset \
   --year 2026 \
   --output artifacts/traverse_predictions_2026.csv
 ```
@@ -149,8 +168,8 @@ or 9.
 A day is in scope only from May 1 through September 30. It is positive when the
 official CHAMBERY-AIX daily maximum temperature is strictly greater than 25°C
 and observations in `[12:00, 20:00)` show wind of at least 18.52 km/h from
-225°–315° for at least 30 cumulative minutes and three consecutive samples,
-with gaps no larger than 10 minutes. Cooler in-season days are negative. Dates
+225°–315° for one sustained run of at least 30 minutes, with qualifying-sample
+gaps no larger than 10 minutes. Cooler in-season days are negative. Dates
 outside the season and days below 75% target-window coverage have an unknown
 label and are excluded from training.
 

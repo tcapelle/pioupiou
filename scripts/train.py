@@ -82,7 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--smoke",
         action="store_true",
-        help="Use an earlier reduced split and one L2 value",
+        help="Use an earlier reduced split and one regularization value",
     )
     parser.add_argument("--wandb-project", default="pioupiou-traverse")
     parser.add_argument("--wandb-name", required=True)
@@ -126,6 +126,21 @@ def main() -> int:
         raise SystemExit(f"Invalid dataset label contract: {error}") from error
     if "issue_minutes" not in frame.columns:
         raise SystemExit("Training requires a same-day timestep dataset")
+    anticipation = dataset_metadata.get("anticipation")
+    if not isinstance(anticipation, dict):
+        raise SystemExit("Training requires onset-aware dataset metadata")
+    required_anticipation_columns = {
+        "meta_anticipation_weight",
+        "meta_minutes_before_onset",
+    }
+    missing_anticipation_columns = required_anticipation_columns.difference(
+        frame.columns
+    )
+    if missing_anticipation_columns:
+        raise SystemExit(
+            "Training requires anticipation columns: "
+            f"{sorted(missing_anticipation_columns)}"
+        )
     l2_candidates = (1.0, 10.0)
     bundle, metrics = train_and_evaluate(
         frame,
@@ -135,6 +150,7 @@ def main() -> int:
     )
     artifact = bundle["metadata"]
     artifact["dataset"] = str(args.dataset)
+    artifact["anticipation"] = anticipation
     runtime, installed_packages = runtime_provenance()
     artifact["runtime"] = runtime
     artifact["provenance"] = {
@@ -169,20 +185,14 @@ def main() -> int:
         metrics_path,
     )
 
-    classifier = bundle["pipeline"].named_steps["classifier"]
     flat = flatten_metrics(metrics)
     flat.update(
         {
             "train/log_loss": metrics["train"]["log_loss"],
-            "model/max_abs_coefficient": float(
-                np.max(np.abs(classifier.coef_))
-            ),
             "data/train_rows": float(artifact["split"]["train_rows"]),
             "model/l2": float(artifact["model"]["l2"]),
-            "model/C": float(artifact["model"]["C"]),
             "model/n_iter": float(artifact["model"]["iterations"]),
-            "model/converged": 1.0,
-            "preprocessing/output_features": float(classifier.coef_.shape[1]),
+            "preprocessing/output_features": float(len(artifact["feature_names"])),
             "validation/selected_threshold": float(artifact["model"]["threshold"]),
         }
     )
@@ -193,7 +203,6 @@ def main() -> int:
         import wandb
 
         configured_l2_candidates = [1.0] if args.smoke else list(l2_candidates)
-        configured_c_candidates = [1.0 / value for value in configured_l2_candidates]
         selection_years = [2018, 2019] if args.smoke else [2020, 2021, 2022]
         run = wandb.init(
             project=args.wandb_project,
@@ -209,34 +218,29 @@ def main() -> int:
                 "features": artifact["feature_names"],
                 "model_backend": "sklearn",
                 "sklearn_version": sklearn.__version__,
-                "estimator_class": "sklearn.linear_model.LogisticRegression",
-                "solver": "lbfgs",
-                "penalty": "l2",
-                "fit_intercept": True,
-                "class_weight": None,
-                "tol": 1e-8,
-                "max_iter": 3000,
+                "estimator_class": "sklearn.ensemble.HistGradientBoostingClassifier",
+                "fit_weighting": artifact["model"]["fit_weighting"],
+                "learning_rate": artifact["model"]["learning_rate"],
+                "max_iter": 200,
+                "max_leaf_nodes": artifact["model"]["max_leaf_nodes"],
+                "min_samples_leaf": artifact["model"]["min_samples_leaf"],
+                "early_stopping": False,
                 "random_state": 20260807,
                 "preprocessing": {
                     "imputer": "median",
                     "keep_empty_features": True,
-                    "scaler": "standard_ddof0_values_only",
-                    "missing_indicator": "all",
-                    "indicator_scaled": False,
                 },
                 "regularization": {
-                    "parameterization": "C",
-                    "C_candidates": configured_c_candidates,
-                    "equivalent_l2_candidates": configured_l2_candidates,
-                    "mapping": "C=1/l2",
-                    "selection_metric": "average_precision",
+                    "parameterization": "l2_regularization",
+                    "l2_candidates": configured_l2_candidates,
+                    "selection_metric": "event_day_3h_average_precision",
                     "folds": "expanding_year",
                     "validation_years": selection_years,
-                    "tie_break": "largest_C",
+                    "tie_break": "weaker_regularization",
                 },
                 "threshold_policy": {
                     "selection_split": "validation",
-                    "objective": "balanced_accuracy",
+                    "objective": "event_day_3h_balanced_accuracy",
                     "tie_break": "f1_then_closest_to_0.5",
                     "decision_rule": "probability_gte_threshold",
                 },
@@ -307,7 +311,6 @@ def main() -> int:
         "model_sha256": model_sha256,
         "threshold": artifact["model"]["threshold"],
         "l2": artifact["model"]["l2"],
-        "C": artifact["model"]["C"],
         "test": metrics["test"],
     }
     print(json.dumps(summary, indent=2, sort_keys=True))

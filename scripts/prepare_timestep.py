@@ -18,7 +18,6 @@ from pioupiou.data.timestep import (
     cutoff_for_minutes,
     issue_time_features,
     parse_clock,
-    traverse_progress_features,
     weather_feed_ages,
 )
 from pioupiou.data.daily import (
@@ -159,7 +158,6 @@ def main() -> int:
         "issue_minutes": issue_minutes,
         **issue_time_features(issue_minutes),
         **piou,
-        **traverse_progress_features(local_day, observations, config, cutoff),
         **station_weather,
     }
     try:
