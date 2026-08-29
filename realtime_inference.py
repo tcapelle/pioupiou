@@ -7,24 +7,29 @@ import argparse
 import json
 import os
 import urllib.request
-from datetime import datetime, time
+from collections.abc import Sequence
+from datetime import datetime, time, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pandas as pd
 
 from pioupiou.data.daily import (
     PRIMARY_WEATHER_STATION,
     WEATHER_STATIONS,
     LabelConfig,
+    PiouObservation,
     WeatherStation,
     WEATHER_RAW_FIELDS,
     calendar_features,
     is_traverse_season,
     label_config_from_payload,
+    local_boundary,
     piou_features,
     piou_observations_from_archive_payload,
+    qualifying_wind_summary,
     valid_weather_station_location,
 )
 from pioupiou.data.timestep import (
@@ -33,26 +38,31 @@ from pioupiou.data.timestep import (
     temperature_contrast_features,
 )
 from pioupiou.inference.model import (
-    load_artifact_with_sha256,
+    load_bundle,
     onset_evidence,
+    predict_bundle_onset_probabilities,
     predict_loaded,
 )
 
 
 PIOU_URL = "https://api.pioupiou.fr/v1/archive/2176?start=last-day&stop=now"
 METEO_URL_TEMPLATE = (
-    "https://public-api.meteofrance.fr/public/DPPaquetObs/v1/paquet/horaire"
+    "https://public-api.meteofrance.fr/public/DPPaquetObs/paquet/horaire"
     "?id-departement={department}&format=json"
 )
 
 
-def fetch_json(url: str, token: str | None = None) -> Any:
+def fetch_json(url: str, api_key: str | None = None) -> Any:
     headers = {"Accept": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    if api_key:
+        headers["apikey"] = api_key
     request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)
+
+
+def meteofrance_department_url(department: str) -> str:
+    return METEO_URL_TEMPLATE.format(department=int(department))
 
 
 def finite(value: Any, conversion=lambda item: item) -> float:
@@ -132,14 +142,33 @@ def current_weather_features(
     return features, observations
 
 
+def observed_wind_onset(
+    observations: Sequence[PiouObservation],
+    cutoff: datetime,
+    config: LabelConfig,
+) -> datetime | None:
+    """Return a qualifying onset once the sustained run is observable."""
+    local_start = local_boundary(cutoff.date(), config.cutoff_hour, cutoff.tzinfo)
+    start_utc = local_start.astimezone(timezone.utc)
+    cutoff_utc = cutoff.astimezone(timezone.utc)
+    observed = [
+        item
+        for item in observations
+        if start_utc <= item.timestamp_utc < cutoff_utc
+    ]
+    return qualifying_wind_summary(observed, cutoff, config)["event_onset"]
+
+
 def predict_now(
     model: Path = Path("artifacts/traverse_model.joblib"),
 ) -> dict[str, Any]:
-    token = os.environ.get("METEOFRANCE_TOKEN")
-    if not token:
+    api_key = os.environ.get("METEOFRANCE_TOKEN")
+    if not api_key:
         raise ValueError("METEOFRANCE_TOKEN is not set")
 
-    payload, pipeline, model_sha256 = load_artifact_with_sha256(model)
+    bundle, model_sha256 = load_bundle(model)
+    payload = bundle["metadata"]
+    pipeline = bundle["pipeline"]
     config = label_config_from_payload(payload["label"])
     local_timezone = ZoneInfo(config.timezone_name)
     cutoff = datetime.now(local_timezone).replace(second=0, microsecond=0)
@@ -172,10 +201,11 @@ def predict_now(
         for item in piou_observations
         if piou_start <= item.timestamp_local < cutoff
     )
+    observed_onset = observed_wind_onset(piou_observations, cutoff, config)
 
     meteo_payloads = {
         department: fetch_json(
-            METEO_URL_TEMPLATE.format(department=department), token
+            meteofrance_department_url(department), api_key
         )
         for department in sorted(
             {station.department for station in WEATHER_STATIONS}
@@ -197,10 +227,20 @@ def predict_now(
         raise ValueError(f"Cannot construct model features: {missing}")
     frame = pd.DataFrame([{name: prepared[name] for name in feature_names}])
     probability, predicted, _ = predict_loaded(payload, pipeline, frame)
+    onset_probabilities = predict_bundle_onset_probabilities(bundle, frame)
+    if observed_onset is not None:
+        onset_probabilities = {
+            horizon: np.zeros_like(values)
+            for horizon, values in onset_probabilities.items()
+        }
 
     return {
         "prediction_time": cutoff.isoformat(),
         "model_sha256": model_sha256,
+        "status": "onset_observed" if observed_onset is not None else "pre_onset",
+        "observed_wind_onset": (
+            observed_onset.isoformat() if observed_onset is not None else None
+        ),
         "piou_observation_time": piou_latest.isoformat(),
         "piou_last_age_minutes": piou["piou_last_age_minutes"],
         "mf_observation_time": meteo_observations[PRIMARY_WEATHER_STATION.slug][-1][
@@ -216,6 +256,10 @@ def predict_now(
         "onset_evidence": float(
             onset_evidence(frame, config.speed_threshold_kmh)[0]
         ),
+        "onset_within_probabilities": {
+            f"{horizon}m": float(values[0])
+            for horizon, values in onset_probabilities.items()
+        },
     }
 
 

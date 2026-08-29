@@ -2,12 +2,17 @@ import json
 import math
 import tempfile
 import unittest
+from unittest import mock
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from realtime_inference import meteofrance_observations
+from realtime_inference import (
+    fetch_json,
+    meteofrance_department_url,
+    meteofrance_observations,
+)
 from pioupiou.data.daily import (
     LabelConfig,
     PiouObservation,
@@ -184,6 +189,24 @@ class ObservationFeatureTests(unittest.TestCase):
         self.assertAlmostEqual(observations[0]["T"], 20.0)
         self.assertAlmostEqual(observations[0]["PMER"], 1012.0)
         self.assertAlmostEqual(observations[0]["GLO"], 360.0)
+
+    def test_realtime_weather_request_uses_api_key_and_normalized_department(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        with (
+            mock.patch(
+                "realtime_inference.urllib.request.urlopen",
+                return_value=response,
+            ) as open_url,
+            mock.patch("realtime_inference.json.load", return_value={"ok": True}),
+        ):
+            self.assertEqual(
+                fetch_json(meteofrance_department_url("01"), "secret"),
+                {"ok": True},
+            )
+        request = open_url.call_args.args[0]
+        self.assertIn("id-departement=1", request.full_url)
+        self.assertEqual(request.get_header("Apikey"), "secret")
 
     def test_weather_quality_is_an_explicit_whitelist(self):
         self.assertEqual(weather_value({"T": "12.3", "QT": "0"}, "T"), 12.3)

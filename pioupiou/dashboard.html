@@ -40,6 +40,11 @@
     .probability-point { fill: var(--coral); stroke: white; stroke-width: 1.5; cursor: crosshair; }
     .evidence-line { fill: none; stroke: var(--solar); stroke-width: 2.25; stroke-dasharray: 7 4; stroke-linejoin: round; stroke-linecap: round; }
     .evidence-point { fill: var(--solar); stroke: white; stroke-width: 1.25; cursor: crosshair; }
+    .horizon-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; opacity: .9; }
+    .horizon-point { stroke: white; stroke-width: 1; cursor: crosshair; }
+    .horizon-60 { stroke: #2f7d4f; fill: #2f7d4f; }
+    .horizon-120 { stroke: #5d9ec4; fill: #5d9ec4; }
+    .horizon-180 { stroke: #9b7bb8; fill: #9b7bb8; }
     .probability-axis { fill: #a33e2c; }
     .threshold-line { stroke: var(--coral); stroke-width: 1.25; stroke-dasharray: 5 5; opacity: .65; }
     .onset-line { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 3 4; opacity: .7; }
@@ -94,6 +99,9 @@
     .swatch.avg-key { height: 2px; background: var(--blue); vertical-align: 4px; }
     .swatch.prediction-key { height: 3px; background: var(--coral); vertical-align: 3px; }
     .swatch.evidence-key { height: 3px; background: var(--solar); vertical-align: 3px; }
+    .swatch.horizon-60-key { height: 3px; background: #2f7d4f; vertical-align: 3px; }
+    .swatch.horizon-120-key { height: 3px; background: #5d9ec4; vertical-align: 3px; }
+    .swatch.horizon-180-key { height: 3px; background: #9b7bb8; vertical-align: 3px; }
     .swatch.onset-key { width: 2px; height: 12px; border-radius: 0; background: var(--ink); vertical-align: -2px; }
     .swatch.temperature-key { height: 3px; background: var(--amber); vertical-align: 3px; }
     .swatch.secondary-weather-key { height: 3px; background: var(--solar); vertical-align: 3px; }
@@ -142,6 +150,9 @@
             <span><b id="model-false-alert">–</b>false-alert days</span>
             <span><b id="model-warning">–</b>median warning</span>
             <span><b id="model-rising">–</b>events with rising onset evidence</span>
+            <span><b id="model-horizon-1h">–</b>onset ≤1 h row AP</span>
+            <span><b id="model-horizon-2h">–</b>onset ≤2 h row AP</span>
+            <span><b id="model-horizon-3h">–</b>onset ≤3 h row AP</span>
           </div>
         </div>
       </section>
@@ -170,6 +181,7 @@
               <span><i class="swatch range-key"></i>minimum–maximum</span>
               <span><i class="swatch avg-key"></i>average wind</span>
               <span id="prediction-legend"><i class="swatch prediction-key"></i>advance probability · <i class="swatch evidence-key"></i>onset evidence · <i class="swatch onset-key"></i>event onset</span>
+              <span id="horizon-legend" hidden><i class="swatch horizon-60-key"></i>P(onset ≤1 h) · <i class="swatch horizon-120-key"></i>P(onset ≤2 h) · <i class="swatch horizon-180-key"></i>P(onset ≤3 h)</span>
               <span><i class="swatch temperature-key"></i>temperature</span>
               <span><i id="secondary-weather-swatch" class="swatch secondary-weather-key"></i><span id="secondary-weather-label">solar radiation</span></span>
               <span>Needle points where the wind is blowing (N = north)</span>
@@ -310,6 +322,22 @@
           evidenceDot.append(svgNode("title", {}, `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")} · ${(point.onset_evidence * 100).toFixed(1)}% of target westerly component`));
           svg.append(evidenceDot);
         });
+        const horizons = [[60, "1"], [120, "2"], [180, "3"]];
+        let hasHorizons = false;
+        horizons.forEach(([horizon, hours]) => {
+          const horizonPoints = visiblePredictions.filter(point => point[horizon] !== undefined);
+          if (!horizonPoints.length) return;
+          hasHorizons = true;
+          const line = horizonPoints.map(point => `${xMinutes(point.issue_minutes)},${probabilityY(point[horizon])}`).join(" ");
+          svg.append(svgNode("polyline", { points: line, class: `horizon-line horizon-${horizon}` }));
+          horizonPoints.forEach(point => {
+            const dot = svgNode("circle", { cx: xMinutes(point.issue_minutes), cy: probabilityY(point[horizon]), r: 3, class: `horizon-point horizon-${horizon}` });
+            const hour = Math.floor(point.issue_minutes / 60), minute = point.issue_minutes % 60;
+            dot.append(svgNode("title", {}, `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")} · ${(point[horizon] * 100).toFixed(1)}% onset within ${hours} h`));
+            svg.append(dot);
+          });
+        });
+        byId("horizon-legend").hidden = !hasHorizons;
         if (predictionDay.event_onset_minutes !== null) {
           const onsetX = xMinutes(predictionDay.event_onset_minutes);
           svg.append(svgNode("line", { x1: onsetX, x2: onsetX, y1: windTop, y2: directionY + 20, class: "onset-line" }));
@@ -427,6 +455,10 @@
           byId("model-false-alert").textContent = `${(100 * metrics.false_alert_day_rate).toFixed(1)}%`;
           byId("model-warning").textContent = `${(metrics.median_warning_minutes / 60).toFixed(1)} h`;
           byId("model-rising").textContent = `${(100 * metrics.event_rising_onset_evidence_rate_final_6h).toFixed(1)}%`;
+          [[60, "model-horizon-1h"], [120, "model-horizon-2h"], [180, "model-horizon-3h"]].forEach(([horizon, id]) => {
+            const horizonMetrics = metrics[`onset_horizon_${horizon}m`];
+            if (horizonMetrics) byId(id).textContent = horizonMetrics.average_precision.toFixed(3);
+          });
         }
         byId("loading").hidden = true;
         byId("dashboard").hidden = false;

@@ -19,10 +19,14 @@ from pioupiou.inference.model import (
     fit_pipeline,
     load_artifact,
     load_artifact_with_sha256,
+    load_bundle,
     load_dataset,
     numeric_feature_frame,
+    onset_horizon_labels,
+    onset_interval_labels,
     onset_evidence,
     onset_evidence_metrics,
+    predict_bundle_onset_probabilities,
     predict_frame,
     save_model_bundle,
     select_anticipation_threshold,
@@ -231,6 +235,55 @@ class TraverseModelTests(unittest.TestCase):
         probability = np.array([0.1, 0.4, 0.5, 0.9])
         self.assertEqual(select_threshold(y, probability), 0.5)
 
+    def test_ordered_onset_bundle_round_trip_preserves_horizon_order(self):
+        rows = []
+        examples = (
+            (1, 30.0, 1.0),
+            (1, 90.0, 0.6),
+            (1, 150.0, 0.2),
+            (1, 240.0, -0.4),
+            (0, np.nan, -1.0),
+        )
+        for year in range(2017, 2027):
+            for day, (label, lead, signal) in enumerate(examples, start=1):
+                rows.append(
+                    {
+                        "date": f"{year}-07-{day:02d}",
+                        "year": year,
+                        "issue_minutes": 720,
+                        "label": label,
+                        "meta_minutes_before_onset": lead,
+                        "meta_anticipation_weight": (
+                            min(lead / 180.0, 1.0) if label else 1.0
+                        ),
+                        "cal_doy_sin": signal,
+                        "piou_last_wind_avg_kmh": signal,
+                        "mf_temperature_c_latest": signal,
+                    }
+                )
+        frame = pd.DataFrame(rows)
+        np.testing.assert_array_equal(
+            onset_interval_labels(frame.iloc[:5]), np.array([0, 1, 2, 3, 3])
+        )
+        np.testing.assert_array_equal(
+            onset_horizon_labels(frame.iloc[:5], 120), np.array([1, 1, 0, 0, 0])
+        )
+        invalid = frame.iloc[:5].copy()
+        invalid.loc[invalid["label"] == 0, "meta_minutes_before_onset"] = 30.0
+        with self.assertRaisesRegex(ValueError, "Negative onset rows"):
+            onset_interval_labels(invalid)
+        bundle, _ = train_and_evaluate(frame, l2_candidates=(1.0,))
+        scored = frame[frame["year"] == 2026]
+        probability = predict_bundle_onset_probabilities(bundle, scored)
+        self.assertTrue(np.all(probability[60] <= probability[120]))
+        self.assertTrue(np.all(probability[120] <= probability[180]))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ordered.joblib"
+            save_model_bundle(bundle, path)
+            loaded, _ = load_bundle(path)
+        loaded_probability = predict_bundle_onset_probabilities(loaded, scored)
+        np.testing.assert_allclose(loaded_probability[180], probability[180])
+
     def test_dataset_identity_includes_issue_time(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "data.csv"
@@ -251,7 +304,7 @@ class TraverseModelTests(unittest.TestCase):
 
     def test_training_has_one_fixed_feature_schema(self):
         rows = []
-        for year in range(2017, 2026):
+        for year in range(2017, 2027):
             for label, signal in ((0, -1.0), (1, 1.0)):
                 rows.append(
                     {
@@ -282,6 +335,12 @@ class TraverseModelTests(unittest.TestCase):
             "equal_total_weight_per_day_within_day_lead_weight",
         )
         self.assertEqual(metrics["test"]["rows"], 4.0)
+        self.assertEqual(
+            bundle["metadata"]["split"]["deployment_fit_years"],
+            list(range(2017, 2026)),
+        )
+        self.assertEqual(bundle["metadata"]["split"]["deployment_fit_rows"], 18)
+        self.assertEqual(metrics["deployment_later_2026"]["rows"], 2.0)
 
     def test_joblib_round_trip_and_hash_check(self):
         with tempfile.TemporaryDirectory() as directory:

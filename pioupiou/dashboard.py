@@ -75,13 +75,16 @@ def load_predictions(path: Path) -> dict[str, Any] | None:
             onset = row.get("event_onset_minutes", "")
             if onset:
                 event_onsets[day] = round(float(onset), 3)
-            grouped[day].append(
-                {
-                    "issue_minutes": int(row["issue_minutes"]),
-                    "probability": round(float(row["traverse_probability"]), 6),
-                    "onset_evidence": round(float(row["onset_evidence"]), 6),
-                }
-            )
+            point = {
+                "issue_minutes": int(row["issue_minutes"]),
+                "probability": round(float(row["traverse_probability"]), 6),
+                "onset_evidence": round(float(row["onset_evidence"]), 6),
+            }
+            for horizon in (60, 120, 180):
+                column = f"probability_onset_within_{horizon}m"
+                if row.get(column):
+                    point[horizon] = round(float(row[column]), 6)
+            grouped[day].append(point)
     metadata_path = path.with_suffix(".metadata.json")
     metadata = json.loads(metadata_path.read_text()) if metadata_path.exists() else {}
     return {
