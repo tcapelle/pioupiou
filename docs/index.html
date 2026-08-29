@@ -27,6 +27,14 @@
     .source-link { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid rgb(16 45 66 / 14%); border-radius:999px; background:rgb(255 255 255 / 45%); color:var(--blue-deep); font-size:13px; font-weight:700; text-decoration:none; backdrop-filter:blur(12px); transition:transform .18s ease,border-color .18s ease,background .18s ease; }
     .source-link:hover { transform:translateY(-2px); border-color:rgb(14 113 129 / 38%); background:rgb(255 255 255 / 72%); }
     .live-dot { width:8px; height:8px; border-radius:50%; background:#39a66d; box-shadow:0 0 0 5px rgb(57 166 109 / 12%); }
+    .audit { margin-bottom:18px; padding:22px 26px; }
+    .audit-head { display:flex; justify-content:space-between; gap:20px; align-items:baseline; margin-bottom:18px; }
+    .audit-head p { margin:0; color:var(--muted); font-size:12px; }
+    .audit-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:0; }
+    .audit-stat { padding:2px 22px; border-left:1px solid var(--line); color:var(--muted); font-size:12px; }
+    .audit-stat:first-child { padding-left:0; border-left:0; }
+    .audit-stat b { display:block; margin-bottom:3px; color:var(--ink); font:500 30px/1 Georgia,serif; letter-spacing:-.035em; }
+    .audit-stat small { display:block; margin-top:3px; color:var(--blue-deep); font-size:11px; }
     .cards { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(280px,.8fr); gap:18px; align-items:stretch; }
     .card { position:relative; overflow:hidden; background:var(--card); border:1px solid rgb(255 255 255 / 70%); border-radius:26px; padding:clamp(24px,4vw,38px); box-shadow:0 18px 50px rgb(30 55 59 / 10%),inset 0 0 0 1px rgb(16 45 66 / 5%); backdrop-filter:blur(15px); }
     .card::before { content:""; position:absolute; inset:0 0 auto; height:3px; background:linear-gradient(90deg,var(--blue),var(--glow)); opacity:.85; }
@@ -85,8 +93,8 @@
     .footer-links { display:flex; gap:16px; white-space:nowrap; }
     .footer a { color:var(--blue-deep); text-decoration:none; }
     .footer a:hover { text-decoration:underline; text-underline-offset:3px; }
-    @media(max-width:760px) { .masthead { align-items:start; flex-direction:column; } .cards { grid-template-columns:1fr; } .archive-head { flex-direction:column; } .footer { flex-direction:column; } }
-    @media(max-width:560px) { .metrics,.archive-summary { grid-template-columns:1fr; } .archive-controls { width:100%; } .archive-controls select { flex:1; min-width:0; } }
+    @media(max-width:760px) { .masthead { align-items:start; flex-direction:column; } .audit-head { align-items:start; flex-direction:column; } .audit-grid { grid-template-columns:1fr 1fr; gap:18px 0; } .audit-stat:nth-child(3) { padding-left:0; border-left:0; } .cards { grid-template-columns:1fr; } .archive-head { flex-direction:column; } .footer { flex-direction:column; } }
+    @media(max-width:560px) { .audit-grid { grid-template-columns:1fr; } .audit-stat { padding:14px 0; border-left:0; border-top:1px solid var(--line); } .audit-stat:first-child { padding-top:0; border-top:0; } .metrics,.archive-summary { grid-template-columns:1fr; } .archive-controls { width:100%; } .archive-controls select { flex:1; min-width:0; } }
   </style>
 </head>
 <body>
@@ -98,6 +106,15 @@
         <a class="source-link" href="https://github.com/tcapelle/pioupiou" target="_blank" rel="noreferrer">GitHub repo ↗</a>
       </nav>
     </header>
+    <section id="audit" class="card audit" hidden>
+      <div class="audit-head"><div class="eyebrow">2026 model audit</div><p id="audit-through"></p></div>
+      <div class="audit-grid">
+        <div class="audit-stat"><b id="audit-events">–</b>Traverse event days<small id="audit-event-detail"></small></div>
+        <div class="audit-stat"><b id="audit-false-alerts">–</b>false-alert days<small id="audit-negative-detail"></small></div>
+        <div class="audit-stat"><b id="audit-ap">–</b>average precision<small>event-day ranking at ≥3 h lead</small></div>
+        <div class="audit-stat"><b id="audit-warning">–</b>median warning<small>among alerted event days</small></div>
+      </div>
+    </section>
     <div class="cards" aria-live="polite">
       <section class="card">
         <div class="topline">
@@ -172,6 +189,19 @@
       byId("wind-direction").textContent = `${compass(wind.direction_degrees)} · ${Math.round(wind.direction_degrees)}°`;
       byId("wind-arrow").style.transform = `rotate(${(Number(wind.direction_degrees) + 180) % 360}deg)`;
     };
+    fetch(`${DATA_BASE}/metrics.json?t=${Date.now()}`, { cache:"no-store" })
+      .then(response => { if (!response.ok) throw new Error("Audit metrics unavailable"); return response.json(); })
+      .then(metrics => {
+        byId("audit").hidden = false;
+        byId("audit-through").textContent = `Retrospective audit through ${displayDate(metrics.through)}`;
+        byId("audit-events").textContent = `${metrics.events_alerted_at_least_3h}/${metrics.event_days}`;
+        byId("audit-event-detail").textContent = "alerted at least 3 hours early";
+        byId("audit-false-alerts").textContent = `${metrics.false_alert_days}/${metrics.negative_days}`;
+        byId("audit-negative-detail").textContent = `${Math.round(100 * metrics.false_alert_days / metrics.negative_days)}% of non-event days`;
+        byId("audit-ap").textContent = Number(metrics.event_day_3h_average_precision).toFixed(3);
+        byId("audit-warning").textContent = `${(Number(metrics.median_warning_minutes) / 60).toFixed(1)} h`;
+      })
+      .catch(() => {});
     const svgNode = (name, attrs = {}, text = "") => {
       const node = document.createElementNS("http://www.w3.org/2000/svg", name);
       Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));

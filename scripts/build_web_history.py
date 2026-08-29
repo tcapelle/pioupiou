@@ -25,6 +25,34 @@ def finite_float(value: Any) -> float | None:
     return parsed if pd.notna(parsed) else None
 
 
+def audit_summary(metadata: dict[str, Any], through: str) -> dict[str, Any]:
+    metrics = metadata["metrics"]
+    positive_days = int(metrics["positive_days"])
+    negative_days = int(metrics["negative_days"])
+    alerted_3h = round(metrics["event_alert_rate_lead_3h"] * positive_days)
+    false_alert_days = round(metrics["false_alert_day_rate"] * negative_days)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "year": int(metadata["year"]),
+        "through": through,
+        "source": "retrospective_audit",
+        "source_note": (
+            "Retrospective audit on later 2026 data; not an untouched prospective "
+            "evaluation and not a live accuracy estimate."
+        ),
+        "event_days": positive_days,
+        "events_alerted_at_least_3h": alerted_3h,
+        "events_missed_at_least_3h": positive_days - alerted_3h,
+        "negative_days": negative_days,
+        "false_alert_days": false_alert_days,
+        "event_day_3h_average_precision": float(
+            metrics["event_day_3h_average_precision"]
+        ),
+        "event_day_3h_roc_auc": float(metrics["event_day_3h_roc_auc"]),
+        "median_warning_minutes": float(metrics["median_warning_minutes"]),
+    }
+
+
 def build_day(
     date_text: str,
     rows: pd.DataFrame,
@@ -126,6 +154,14 @@ def write_history(
     dates = {"schema_version": SCHEMA_VERSION, "dates": index}
     (output_dir / "dates.json").write_text(
         json.dumps(dates, indent=2, sort_keys=True) + "\n"
+    )
+    metadata_path = predictions_path.with_suffix(".metadata.json")
+    if not metadata_path.exists():
+        raise ValueError(f"Prediction metadata not found: {metadata_path}")
+    metadata = json.loads(metadata_path.read_text())
+    summary = audit_summary(metadata, str(predictions["date"].max()))
+    (output_dir / "metrics.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n"
     )
     return {"days": len(index), "points": len(predictions), "output": str(output_dir)}
 
