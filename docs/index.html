@@ -240,7 +240,10 @@
           return option;
         }));
         byId("archive").hidden = false;
-        selectArchiveDate(data.dates.length - 1);
+        const reconstructed = data.dates
+          .map((item, index) => item.source === "retrospective_reconstruction" ? index : -1)
+          .filter(index => index >= 0);
+        selectArchiveDate(reconstructed.at(-1) ?? data.dates.length - 1);
       })
       .catch(() => {});
     byId("archive-date").addEventListener("change", event => selectArchiveDate(Number(event.target.value)));
