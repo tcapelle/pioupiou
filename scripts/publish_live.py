@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import tempfile
 import time
@@ -54,27 +55,95 @@ def git(*args: str, cwd: Path | None = None, capture: bool = False) -> str:
     return result.stdout.strip() if capture else ""
 
 
-def publish(document: dict[str, Any], branch: str, remote: str) -> None:
-    """Force-replace one data-only branch with a single root commit."""
+def update_history(checkout: Path, document: dict[str, Any]) -> None:
+    prediction_time = document.get("prediction_time")
+    if not prediction_time:
+        return
+    date_text = str(prediction_time)[:10]
+    days_dir = checkout / "days"
+    days_dir.mkdir(exist_ok=True)
+    path = days_dir / f"{date_text}.json"
+    if path.exists():
+        day = json.loads(path.read_text())
+    else:
+        day = {
+            "schema_version": SCHEMA_VERSION,
+            "date": date_text,
+            "source": "live_published",
+            "source_note": "Published contemporaneously by the live inference computer.",
+            "label": None,
+            "event_onset_minutes": None,
+            "threshold": None,
+            "points": [],
+        }
+    points = {
+        point["prediction_time"]: point
+        for point in day["points"]
+        if point.get("prediction_time")
+    }
+    points[str(prediction_time)] = document
+    day["points"] = [points[key] for key in sorted(points)]
+    if day["source"] != "retrospective_reconstruction":
+        day["source"] = "live_published"
+    path.write_text(json.dumps(day, indent=2, sort_keys=True) + "\n")
+
+    dates = []
+    for daily_path in sorted(days_dir.glob("*.json")):
+        item = json.loads(daily_path.read_text())
+        dates.append(
+            {
+                "date": item["date"],
+                "source": item["source"],
+                "label": item.get("label"),
+                "points": len(item["points"]),
+            }
+        )
+    (checkout / "dates.json").write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "dates": dates}, indent=2)
+        + "\n"
+    )
+
+
+def publish(
+    document: dict[str, Any], branch: str, remote: str, seed_history: Path | None
+) -> None:
+    """Amend the data-only branch root commit, preserving its daily archive."""
     remote_url = git("remote", "get-url", remote, capture=True)
     with tempfile.TemporaryDirectory(prefix="pioupiou-live-") as directory:
-        checkout = Path(directory)
-        git("init", "--quiet", cwd=checkout)
-        git("remote", "add", remote, remote_url, cwd=checkout)
+        checkout = Path(directory) / "checkout"
+        git(
+            "clone",
+            "--quiet",
+            "--depth",
+            "1",
+            "--branch",
+            branch,
+            remote_url,
+            str(checkout),
+        )
+        if seed_history is not None:
+            shutil.copytree(seed_history, checkout, dirs_exist_ok=True)
         (checkout / "current_prediction.json").write_text(
             json.dumps(document, indent=2, sort_keys=True) + "\n"
         )
-        git("add", "current_prediction.json", cwd=checkout)
-        git("commit", "--quiet", "-m", "Update live prediction", cwd=checkout)
-        git("push", "--force", remote, f"HEAD:refs/heads/{branch}", cwd=checkout)
+        update_history(checkout, document)
+        git("add", "-A", cwd=checkout)
+        git("commit", "--quiet", "--amend", "--no-edit", cwd=checkout)
+        git("push", "--force", remote_url, f"HEAD:refs/heads/{branch}", cwd=checkout)
 
 
-def run_once(model: Path, branch: str, remote: str, dry_run: bool) -> None:
+def run_once(
+    model: Path,
+    branch: str,
+    remote: str,
+    dry_run: bool,
+    seed_history: Path | None,
+) -> None:
     document = prediction_document(model)
     if dry_run:
         print(json.dumps(document, indent=2, sort_keys=True))
         return
-    publish(document, branch, remote)
+    publish(document, branch, remote, seed_history)
     print(f"Published {document['status']} prediction at {document['published_at']}")
 
 
@@ -90,6 +159,11 @@ def main() -> int:
     )
     parser.add_argument("--interval", type=int, default=300)
     parser.add_argument(
+        "--seed-history",
+        type=Path,
+        help="Merge a generated history directory before publishing",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="Print JSON without using Git"
     )
     args = parser.parse_args()
@@ -98,7 +172,13 @@ def main() -> int:
 
     while True:
         try:
-            run_once(args.model, args.branch, args.remote, args.dry_run)
+            run_once(
+                args.model,
+                args.branch,
+                args.remote,
+                args.dry_run,
+                args.seed_history,
+            )
         except subprocess.CalledProcessError as error:
             print(f"Publish failed: {error}")
         if not args.watch:

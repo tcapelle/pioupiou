@@ -165,6 +165,28 @@ the same command after restarting the terminal or computer. The publisher
 force-replaces the `live-data` branch with one root commit, so updates do not
 accumulate Git history. The page marks a result stale after 15 minutes.
 
+### Rebuild and seed the date browser
+
+The public date browser contains retrospectively reconstructed 2026 predictions
+and the PiouPiou observation available strictly before each issue time. These
+are labeled separately from contemporaneously published live results. Rebuild
+and seed them with:
+
+```bash
+uv run --frozen python -m scripts.predict_dataset \
+  --year 2026 \
+  --output artifacts/traverse_predictions_2026.csv
+uv run --frozen python -m scripts.build_web_history
+uv run --frozen python -m scripts.publish_live \
+  --seed-history artifacts/web_history
+```
+
+After the one-time seed, the normal `--watch --interval 300` command preserves
+the daily files, appends or replaces the current five-minute point, rebuilds the
+date index, and amends the branch's single root commit. Restart an already
+running publisher after updating the repository so it uses this archive-aware
+behavior.
+
 `joblib` uses pickle semantics. Load only trusted model bundles. A downloaded
 artifact can be checked before deserialization with `--model-sha256`.
 

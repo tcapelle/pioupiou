@@ -54,13 +54,39 @@
     .wind-details b { display:block; color:var(--ink); font-size:20px; }
     .wind-source { display:inline-flex; align-items:center; gap:6px; margin-top:22px; color:var(--blue-deep); font-size:13px; font-weight:700; text-decoration:none; }
     .wind-source:hover { text-decoration:underline; text-underline-offset:3px; }
+    .archive { margin-top:18px; }
+    .archive-head { display:flex; justify-content:space-between; gap:20px; align-items:start; }
+    .archive-title { margin:3px 0 0; font:500 28px/1.1 Georgia,serif; letter-spacing:-.025em; }
+    .archive-controls { display:flex; gap:7px; align-items:center; }
+    .archive-controls button,.archive-controls select { height:38px; border:1px solid rgb(16 45 66 / 14%); border-radius:10px; background:rgb(255 255 255 / 65%); color:var(--ink); font:inherit; }
+    .archive-controls button { width:38px; cursor:pointer; font-size:19px; }
+    .archive-controls button:disabled { opacity:.35; cursor:default; }
+    .archive-controls select { padding:0 32px 0 11px; }
+    .archive-meta { display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin:18px 0 4px; }
+    .archive-badge { padding:5px 9px; border-radius:999px; background:rgb(14 113 129 / 10%); color:var(--blue-deep); font-size:11px; font-weight:750; }
+    .archive-badge.event { background:rgb(225 103 77 / 14%); color:#a33e2c; }
+    .archive-note { color:var(--muted); font-size:12px; }
+    .archive-chart { width:100%; min-height:330px; display:block; margin-top:12px; overflow:visible; }
+    .chart-grid { stroke:rgb(16 45 66 / 10%); stroke-width:1; }
+    .chart-label { fill:var(--muted); font-size:11px; }
+    .chart-probability { fill:none; stroke:var(--coral); stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-wind { fill:none; stroke:var(--blue); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-gust { fill:none; stroke:#79b9bf; stroke-width:1.75; stroke-dasharray:5 4; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-threshold { stroke:var(--coral); stroke-width:1; stroke-dasharray:4 5; opacity:.55; }
+    .archive-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; padding-top:22px; border-top:1px solid var(--line); }
+    .archive-summary span { color:var(--muted); font-size:12px; }
+    .archive-summary b { display:block; color:var(--ink); font-size:20px; }
+    .chart-legend { display:flex; gap:16px; flex-wrap:wrap; margin-top:-8px; color:var(--muted); font-size:11px; }
+    .legend-line { display:inline-block; width:20px; height:3px; margin-right:6px; border-radius:2px; vertical-align:3px; background:var(--coral); }
+    .legend-line.wind { background:var(--blue); }
+    .legend-line.gust { height:2px; background:#79b9bf; }
     .footer { display:flex; justify-content:space-between; gap:20px; align-items:start; margin:24px 2px 0; color:var(--muted); font-size:12px; }
     .footer .note { margin:0; }
     .footer-links { display:flex; gap:16px; white-space:nowrap; }
     .footer a { color:var(--blue-deep); text-decoration:none; }
     .footer a:hover { text-decoration:underline; text-underline-offset:3px; }
-    @media(max-width:760px) { .masthead { align-items:start; flex-direction:column; } .cards { grid-template-columns:1fr; } .footer { flex-direction:column; } }
-    @media(max-width:560px) { .metrics { grid-template-columns:1fr; } }
+    @media(max-width:760px) { .masthead { align-items:start; flex-direction:column; } .cards { grid-template-columns:1fr; } .archive-head { flex-direction:column; } .footer { flex-direction:column; } }
+    @media(max-width:560px) { .metrics,.archive-summary { grid-template-columns:1fr; } .archive-controls { width:100%; } .archive-controls select { flex:1; min-width:0; } }
   </style>
 </head>
 <body>
@@ -105,13 +131,33 @@
         </div>
       </section>
     </div>
+    <section id="archive" class="card archive" hidden>
+      <div class="archive-head">
+        <div><div class="eyebrow">2026 archive</div><h2 class="archive-title">Browse previous days</h2></div>
+        <div class="archive-controls">
+          <button id="archive-previous" aria-label="Previous date">‹</button>
+          <select id="archive-date" aria-label="Archived date"></select>
+          <button id="archive-next" aria-label="Next date">›</button>
+        </div>
+      </div>
+      <div class="archive-meta"><span id="archive-event" class="archive-badge"></span><span id="archive-source" class="archive-note"></span></div>
+      <svg id="archive-chart" class="archive-chart" viewBox="0 0 880 330" role="img" aria-label="Daily wind and Traverse probability timeline"></svg>
+      <div class="chart-legend"><span><i class="legend-line"></i>Traverse probability</span><span><i class="legend-line wind"></i>average wind</span><span><i class="legend-line gust"></i>gust</span></div>
+      <div class="archive-summary">
+        <span><b id="archive-max-probability">–</b>maximum probability</span>
+        <span><b id="archive-peak-gust">–</b>peak gust</span>
+        <span><b id="archive-points">–</b>prediction checkpoints</span>
+      </div>
+    </section>
     <footer class="footer">
       <p class="note">Experimental research signal, not a safety forecast. Stale results are marked automatically.</p>
       <div class="footer-links"><a href="https://pioupiou.fr/" target="_blank" rel="noreferrer">PiouPiou ↗</a><a href="https://github.com/tcapelle/pioupiou" target="_blank" rel="noreferrer">Method & code ↗</a></div>
     </footer>
   </main>
   <script>
-    const DATA_URL = "https://raw.githubusercontent.com/tcapelle/pioupiou/live-data/current_prediction.json";
+    const DATA_BASE = "https://raw.githubusercontent.com/tcapelle/pioupiou/live-data";
+    const DATA_URL = `${DATA_BASE}/current_prediction.json`;
+    const archiveState = { dates: [], index: 0 };
     const byId = id => document.getElementById(id);
     const percent = value => `${Math.round(100 * Number(value))}%`;
     const knots = value => Number(value) / 1.852;
@@ -126,6 +172,80 @@
       byId("wind-direction").textContent = `${compass(wind.direction_degrees)} · ${Math.round(wind.direction_degrees)}°`;
       byId("wind-arrow").style.transform = `rotate(${(Number(wind.direction_degrees) + 180) % 360}deg)`;
     };
+    const svgNode = (name, attrs = {}, text = "") => {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+      Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+      if (text) node.textContent = text;
+      return node;
+    };
+    const displayDate = value => new Intl.DateTimeFormat("en-GB", { dateStyle:"medium" }).format(new Date(`${value}T12:00:00`));
+    const minutesOfDay = value => Number(String(value).slice(11,13)) * 60 + Number(String(value).slice(14,16));
+    const renderArchiveDay = day => {
+      const points = day.points.filter(point => point.current_wind);
+      const probabilityPoints = points.filter(point => Number.isFinite(Number(point.traverse_probability)));
+      byId("archive-event").textContent = day.label ? "Traverse candidate" : "No rule match";
+      byId("archive-event").className = `archive-badge${day.label ? " event" : ""}`;
+      byId("archive-source").textContent = day.source === "retrospective_reconstruction" ? "Retrospective reconstruction · not published live on this date" : "Contemporaneously published live";
+      byId("archive-max-probability").textContent = probabilityPoints.length ? percent(Math.max(...probabilityPoints.map(point => Number(point.traverse_probability)))) : "–";
+      byId("archive-peak-gust").textContent = `${Math.max(...points.map(point => knots(point.current_wind.gust_kmh))).toFixed(1)} kn`;
+      byId("archive-points").textContent = String(points.length);
+      const svg = byId("archive-chart");
+      svg.replaceChildren();
+      const width = 880, height = 330, left = 48, right = 50, top = 24, bottom = 42;
+      const start = 390, end = 1200;
+      const chartWidth = width - left - right, chartHeight = height - top - bottom;
+      const x = minutes => left + (minutes - start) / (end - start) * chartWidth;
+      const windMax = Math.max(10, Math.ceil(Math.max(...points.map(point => knots(point.current_wind.gust_kmh))) / 5) * 5);
+      const yWind = value => top + chartHeight - value / windMax * chartHeight;
+      const yProbability = value => top + chartHeight - value * chartHeight;
+      [420,540,720,900,1080,1200].forEach(minutes => {
+        svg.append(svgNode("line", { x1:x(minutes), x2:x(minutes), y1:top, y2:top + chartHeight, class:"chart-grid" }));
+        svg.append(svgNode("text", { x:x(minutes), y:height - 14, "text-anchor":"middle", class:"chart-label" }, `${String(Math.floor(minutes / 60)).padStart(2,"0")}:00`));
+      });
+      for (let value = 0; value <= windMax; value += 5) {
+        svg.append(svgNode("line", { x1:left, x2:width - right, y1:yWind(value), y2:yWind(value), class:"chart-grid" }));
+        svg.append(svgNode("text", { x:left - 8, y:yWind(value) + 4, "text-anchor":"end", class:"chart-label" }, value));
+      }
+      [0,.25,.5,.75,1].forEach(value => svg.append(svgNode("text", { x:width - right + 8, y:yProbability(value) + 4, class:"chart-label" }, `${Math.round(value * 100)}%`)));
+      if (Number.isFinite(Number(day.threshold))) svg.append(svgNode("line", { x1:left, x2:width - right, y1:yProbability(day.threshold), y2:yProbability(day.threshold), class:"chart-threshold" }));
+      const line = (value, y) => points.map(point => `${x(minutesOfDay(point.prediction_time))},${y(value(point))}`).join(" ");
+      svg.append(svgNode("polyline", { points:line(point => knots(point.current_wind.gust_kmh), yWind), class:"chart-gust" }));
+      svg.append(svgNode("polyline", { points:line(point => knots(point.current_wind.average_kmh), yWind), class:"chart-wind" }));
+      if (probabilityPoints.length) {
+        const probabilityLine = probabilityPoints.map(point => `${x(minutesOfDay(point.prediction_time))},${yProbability(Number(point.traverse_probability))}`).join(" ");
+        svg.append(svgNode("polyline", { points:probabilityLine, class:"chart-probability" }));
+      }
+      svg.append(svgNode("text", { x:left, y:14, class:"chart-label" }, "wind · knots"));
+      svg.append(svgNode("text", { x:width - right, y:14, "text-anchor":"end", class:"chart-label" }, "probability"));
+    };
+    const selectArchiveDate = index => {
+      archiveState.index = index;
+      const item = archiveState.dates[index];
+      byId("archive-date").value = String(index);
+      byId("archive-previous").disabled = index === 0;
+      byId("archive-next").disabled = index === archiveState.dates.length - 1;
+      fetch(`${DATA_BASE}/days/${item.date}.json?t=${Date.now()}`, { cache:"no-store" })
+        .then(response => { if (!response.ok) throw new Error(`Archive day unavailable (${response.status})`); return response.json(); })
+        .then(renderArchiveDay);
+    };
+    fetch(`${DATA_BASE}/dates.json?t=${Date.now()}`, { cache:"no-store" })
+      .then(response => { if (!response.ok) throw new Error("Archive index unavailable"); return response.json(); })
+      .then(data => {
+        archiveState.dates = data.dates;
+        const select = byId("archive-date");
+        select.replaceChildren(...data.dates.map((item, index) => {
+          const option = document.createElement("option");
+          option.value = index;
+          option.textContent = `${item.label ? "● " : ""}${displayDate(item.date)}`;
+          return option;
+        }));
+        byId("archive").hidden = false;
+        selectArchiveDate(data.dates.length - 1);
+      })
+      .catch(() => {});
+    byId("archive-date").addEventListener("change", event => selectArchiveDate(Number(event.target.value)));
+    byId("archive-previous").addEventListener("click", () => selectArchiveDate(archiveState.index - 1));
+    byId("archive-next").addEventListener("click", () => selectArchiveDate(archiveState.index + 1));
     fetch(`${DATA_URL}?t=${Date.now()}`, { cache:"no-store" })
       .then(response => { if (!response.ok) throw new Error(`Live data unavailable (${response.status})`); return response.json(); })
       .then(data => {
