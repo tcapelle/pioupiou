@@ -21,6 +21,7 @@
     main { width:min(980px,calc(100% - 32px)); margin:clamp(32px,7vw,82px) auto; }
     a { color:inherit; }
     .masthead { display:flex; justify-content:space-between; gap:28px; align-items:end; margin-bottom:32px; }
+    .mast-actions { display:flex; gap:9px; flex-wrap:wrap; justify-content:flex-end; }
     h1 { margin:0; font:500 clamp(42px,8vw,76px)/.95 Georgia,serif; letter-spacing:-.055em; }
     .lede { margin:14px 0 0; color:var(--muted); font-size:17px; }
     .source-link { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid rgb(16 45 66 / 14%); border-radius:999px; background:rgb(255 255 255 / 45%); color:var(--blue-deep); font-size:13px; font-weight:700; text-decoration:none; backdrop-filter:blur(12px); transition:transform .18s ease,border-color .18s ease,background .18s ease; }
@@ -66,7 +67,10 @@
   <main>
     <header class="masthead">
       <div><h1>Traverse forecast</h1><p class="lede">Live wind and same-day outlook for Lac du Bourget.</p></div>
-      <a class="source-link" href="https://www.openwindmap.org/windbird-2176" target="_blank" rel="noreferrer"><span class="live-dot"></span>Open live station ↗</a>
+      <nav class="mast-actions" aria-label="Project links">
+        <a class="source-link" href="https://www.openwindmap.org/windbird-2176" target="_blank" rel="noreferrer"><span class="live-dot"></span>Live station ↗</a>
+        <a class="source-link" href="https://github.com/tcapelle/pioupiou" target="_blank" rel="noreferrer">GitHub repo ↗</a>
+      </nav>
     </header>
     <div class="cards" aria-live="polite">
       <section class="card">
