@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Traverse forecast · Lac du Bourget</title>
+  <style>
+    :root { color-scheme:light; --ink:#173148; --muted:#6e7e89; --paper:#f5f1e8; --card:#fffdf8; --line:#d8ddd9; --blue:#176b87; --coral:#e1674d; --green:#2f7d4f; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.5 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { width:min(760px,calc(100% - 32px)); margin:clamp(32px,8vw,90px) auto; }
+    h1 { margin:0; font:500 clamp(38px,8vw,70px)/1 Georgia,serif; letter-spacing:-.045em; }
+    .lede { margin:12px 0 30px; color:var(--muted); font-size:17px; }
+    .card { background:var(--card); border:1px solid #e5e2d9; border-radius:22px; padding:clamp(24px,5vw,42px); box-shadow:0 14px 40px rgb(38 57 62 / 8%); }
+    .topline { display:flex; justify-content:space-between; gap:20px; align-items:start; }
+    .eyebrow { color:var(--muted); font-size:12px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; }
+    .status { padding:5px 10px; border-radius:999px; background:#e7efe9; color:var(--green); font-size:12px; font-weight:700; }
+    .status.alert { background:rgb(225 103 77 / 14%); color:#a33e2c; }
+    .status.offline { background:#ecebea; color:var(--muted); }
+    .probability { margin:18px 0 4px; font-size:clamp(62px,17vw,116px); line-height:1; letter-spacing:-.07em; }
+    .probability-label { color:var(--muted); }
+    .meter { height:12px; margin:26px 0 30px; overflow:hidden; border-radius:8px; background:#e3e8e6; }
+    .meter span { display:block; width:0; height:100%; background:var(--blue); border-radius:inherit; transition:width .5s ease; }
+    .metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; padding-top:26px; border-top:1px solid var(--line); }
+    .metrics span { color:var(--muted); font-size:12px; }
+    .metrics b { display:block; margin-bottom:2px; color:var(--ink); font-size:20px; font-weight:650; }
+    .note { margin:24px 2px 0; color:var(--muted); font-size:12px; }
+    #message { margin:28px 0 0; color:var(--muted); }
+    @media(max-width:560px) { .metrics { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Traverse forecast</h1>
+    <p class="lede">Same-day advance signal for Lac du Bourget.</p>
+    <section class="card" aria-live="polite">
+      <div class="topline">
+        <div><div class="eyebrow">Current probability</div><div id="issued">Loading live prediction…</div></div>
+        <span id="status" class="status offline">Loading</span>
+      </div>
+      <div id="result" hidden>
+        <div id="probability" class="probability">–</div>
+        <div class="probability-label">chance of a qualifying Traverse later today</div>
+        <div class="meter"><span id="meter"></span></div>
+        <div class="metrics">
+          <span><b id="onset">–</b>onset within 3 hours</span>
+          <span><b id="evidence">–</b>physical onset evidence</span>
+          <span><b id="freshness">–</b>latest wind observation</span>
+        </div>
+      </div>
+      <p id="message"></p>
+    </section>
+    <p class="note">Experimental research signal, not a safety forecast. Updated by a local computer; stale results are marked automatically.</p>
+  </main>
+  <script>
+    const DATA_URL = "https://raw.githubusercontent.com/tcapelle/pioupiou/live-data/current_prediction.json";
+    const byId = id => document.getElementById(id);
+    const percent = value => `${Math.round(100 * Number(value))}%`;
+    const displayTime = value => new Intl.DateTimeFormat("en-GB", { dateStyle:"medium", timeStyle:"short", timeZone:"Europe/Paris" }).format(new Date(value));
+    fetch(`${DATA_URL}?t=${Date.now()}`, { cache:"no-store" })
+      .then(response => { if (!response.ok) throw new Error(`Live data unavailable (${response.status})`); return response.json(); })
+      .then(data => {
+        const ageMinutes = (Date.now() - new Date(data.published_at)) / 60000;
+        const stale = !Number.isFinite(ageMinutes) || ageMinutes > 15;
+        byId("issued").textContent = `Published ${displayTime(data.published_at)}`;
+        if (data.status === "unavailable") throw new Error(data.message || "Prediction unavailable");
+        if (data.status === "outside_traverse_season") {
+          byId("status").textContent = stale ? "Stale" : "Out of season";
+          byId("message").textContent = "The model runs from May through September.";
+          return;
+        }
+        if (data.status === "outside_prediction_window") {
+          byId("status").textContent = stale ? "Stale" : "Day complete";
+          byId("message").textContent = "Predictions run from 06:30 through 19:59 local time.";
+          return;
+        }
+        const probability = Number(data.traverse_probability);
+        byId("result").hidden = false;
+        byId("probability").textContent = percent(probability);
+        byId("meter").style.width = percent(probability);
+        byId("onset").textContent = percent(data.onset_within_probabilities?.["180m"] ?? 0);
+        byId("evidence").textContent = percent(data.onset_evidence ?? 0);
+        byId("freshness").textContent = data.piou_observation_time ? displayTime(data.piou_observation_time) : "–";
+        byId("status").textContent = stale ? "Stale" : data.status === "onset_observed" ? "Onset observed" : data.predict_traverse ? "Traverse signal" : "No signal";
+        byId("status").className = `status ${stale ? "offline" : data.predict_traverse ? "alert" : ""}`;
+        if (stale) byId("message").textContent = "The publishing computer has not updated this result recently.";
+      })
+      .catch(error => {
+        byId("status").textContent = "Offline";
+        byId("status").className = "status offline";
+        byId("issued").textContent = "No current result";
+        byId("message").textContent = error.message;
+      });
+  </script>
+</body>
+</html>

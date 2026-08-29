@@ -128,6 +128,28 @@ six hours. Rule matches are candidates, not independently confirmed Traverse
 observations. Dashboard data is built from
 the local archives on first load and then cached in memory.
 
+## Publish the live GitHub Pages prediction
+
+The static page in `docs/` reads the latest result from
+`live-data/current_prediction.json`. Enable GitHub Pages from the `main`
+branch's `/docs` directory once. Publish one result from the inference computer:
+
+```bash
+uv run --frozen python -m scripts.publish_live
+```
+
+The publisher force-replaces the `live-data` branch with one root commit, so
+five-minute updates do not accumulate Git history. Keep it running with:
+
+```bash
+TRAVERSE_MODEL=artifacts/traverse_model.joblib \
+  uv run --frozen python -m scripts.publish_live --watch --interval 300
+```
+
+This requires Git push access and `METEOFRANCE_TOKEN`. The page marks results
+stale after 15 minutes. Use `--dry-run` to inspect the public JSON without
+pushing.
+
 `joblib` uses pickle semantics. Load only trusted model bundles. A downloaded
 artifact can be checked before deserialization with `--model-sha256`.
 
