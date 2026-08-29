@@ -21,9 +21,9 @@ class DashboardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "predictions.csv"
             path.write_text(
-                "date,year,issue_minutes,label,event_onset_minutes,traverse_probability,onset_evidence,predict_traverse,threshold\n"
-                "2026-06-01,2026,390,1,780.5,0.25,0.2,1,0.2\n"
-                "2026-06-01,2026,420,1,780.5,0.5,0.4,1,0.2\n"
+                "date,year,issue_minutes,label,event_onset_minutes,traverse_probability,onset_evidence,predict_traverse,threshold,probability_onset_within_60m,probability_onset_within_120m,probability_onset_within_180m\n"
+                "2026-06-01,2026,390,1,780.5,0.25,0.2,1,0.2,0.1,0.2,0.3\n"
+                "2026-06-01,2026,420,1,780.5,0.5,0.4,1,0.2,0.2,0.4,0.6\n"
             )
             result = load_predictions(path)
         self.assertEqual(len(result["days"]), 1)
@@ -31,6 +31,9 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(result["days"][0]["event_onset_minutes"], 780.5)
         self.assertEqual(result["days"][0]["predictions"][1]["probability"], 0.5)
         self.assertEqual(result["days"][0]["predictions"][1]["onset_evidence"], 0.4)
+        self.assertEqual(result["days"][0]["predictions"][1][60], 0.2)
+        self.assertEqual(result["days"][0]["predictions"][1][120], 0.4)
+        self.assertEqual(result["days"][0]["predictions"][1][180], 0.6)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score a held-out year without changing the trained model or threshold."""
+"""Score a year later than every fitted deployment season."""
 
 from __future__ import annotations
 
@@ -13,9 +13,11 @@ from pioupiou.inference.model import (
     anticipation_metrics,
     anticipation_weights,
     classification_metrics,
-    load_artifact_with_sha256,
+    load_bundle,
     load_dataset,
+    onset_horizon_labels,
     onset_evidence,
+    predict_bundle_onset_probabilities,
     predict_probabilities,
     save_json,
     sha256_file,
@@ -36,15 +38,16 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    payload, pipeline, model_sha256 = load_artifact_with_sha256(args.model)
+    bundle, model_sha256 = load_bundle(args.model)
+    payload = bundle["metadata"]
+    pipeline = bundle["pipeline"]
     frame = load_dataset(args.dataset)
     held_out = frame[frame["year"] == args.year].copy()
     if held_out.empty:
         raise SystemExit(f"Dataset contains no labeled rows for {args.year}")
-    trained_years = set(payload["split"]["train_years"])
-    validation_years = set(payload["split"]["validation_years"])
-    if args.year in trained_years | validation_years:
-        raise SystemExit(f"Refusing to describe {args.year} as held out")
+    deployment_fit_years = set(payload["split"]["deployment_fit_years"])
+    if args.year in deployment_fit_years:
+        raise SystemExit(f"Refusing to score fitted deployment year {args.year}")
 
     feature_names = list(payload["feature_names"])
     required_columns = {
@@ -78,6 +81,9 @@ def main() -> int:
             "threshold": threshold,
         }
     )
+    onset_probabilities = predict_bundle_onset_probabilities(bundle, held_out)
+    for horizon, onset_probability in onset_probabilities.items():
+        output[f"probability_onset_within_{horizon}m"] = onset_probability
     args.output.parent.mkdir(parents=True, exist_ok=True)
     output.to_csv(args.output, index=False)
     metrics = {
@@ -89,6 +95,13 @@ def main() -> int:
         ),
         **anticipation_metrics(held_out, probability, threshold),
     }
+    onset_thresholds = (payload.get("onset_model") or {}).get("thresholds", {})
+    for horizon, onset_probability in onset_probabilities.items():
+        metrics[f"onset_horizon_{horizon}m"] = classification_metrics(
+            onset_horizon_labels(held_out, horizon),
+            onset_probability,
+            float(onset_thresholds[str(horizon)]),
+        )
     metadata_path = args.output.with_suffix(".metadata.json")
     save_json(
         {

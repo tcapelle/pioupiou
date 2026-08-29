@@ -9,11 +9,11 @@ time from two observation feeds and the local clock:
 | --- | ---: | --- | --- |
 | `cal_` | 4 | Requested local date and time | Available locally |
 | `piou_` | 29 | OpenWindMap Windbird 2176 | Live and archive feeds verified |
-| `mf_` | 61 | Four Météo-France stations and thermal contrasts | Historical feeds verified; live token required |
+| `mf_` | 61 | Four Météo-France stations and thermal contrasts | Historical feeds verified; live API key required |
 
 The root-level `realtime_inference.py` command implements this path with the
-existing feature engineering and trained model. It expects a temporary
-Météo-France bearer token in `METEOFRANCE_TOKEN` and does not persist API
+existing feature engineering and trained model. It expects a Météo-France
+application API key in `METEOFRANCE_TOKEN` and does not persist API
 responses.
 
 ```bash
@@ -34,7 +34,10 @@ PiouPiou CSV files and the historical Météo-France cache.
 The response separates the boosted model's advance probability from
 `onset_evidence`, the observed westerly wind component normalized by the target
 speed. The latter is an interpretable event-monitoring index, not a forecast
-probability.
+probability. The same 94 features feed an ordered four-interval companion whose
+cumulative estimates are returned under `onset_within_probabilities` for 60,
+120, and 180 minutes. By construction, the shorter-horizon estimate cannot
+exceed a longer-horizon estimate.
 
 ## Time and leakage contract
 
@@ -53,9 +56,11 @@ probability.
   secondary stations require finite temperature with the same age limit.
 - The prediction window remains `[12:00, 20:00)` local time. The model was
   trained only on positive rows before the onset of the first sustained
-  30-minute qualifying run; once such wind has begun, live observations should
-  be treated as event monitoring. The target also requires the eventual
-  CHAMBERY-AIX daily maximum to exceed 25°C.
+  30-minute qualifying run. Once that sustained run becomes observable, the
+  API returns `status: onset_observed` and zero future-onset probabilities; live
+  observations are then event monitoring. Because the run requires 30 minutes
+  to confirm, its recorded start necessarily precedes the status change. The
+  target also requires the eventual CHAMBERY-AIX daily maximum to exceed 25°C.
 
 These boundaries are part of the trained model contract. A live implementation
 must not substitute receipt time for observation time or include observations
@@ -140,13 +145,14 @@ after the round hour. The appropriate feed is the 24-hour hourly package for
 departments 01 and 73, filtered to the configured station IDs:
 
 ```text
-https://public-api.meteofrance.fr/public/DPPaquetObs/v1/paquet/horaire?id-departement=01&format=json
-https://public-api.meteofrance.fr/public/DPPaquetObs/v1/paquet/horaire?id-departement=73&format=json
+https://public-api.meteofrance.fr/public/DPPaquetObs/paquet/horaire?id-departement=1&format=json
+https://public-api.meteofrance.fr/public/DPPaquetObs/paquet/horaire?id-departement=73&format=json
 ```
 
-The request requires a Météo-France OAuth2 bearer token. The subscribed API's
-current Swagger documentation is the authority for the base path and token
-flow. Relevant public documentation:
+The request uses the application key in the `apikey` header. Department IDs in
+this endpoint are numeric, so the Ain archive department `01` is requested as
+`1`. The subscribed API's current Swagger documentation is the authority for
+the base path and credential flow. Relevant public documentation:
 
 - [API Paquet Observations](https://confluence-meteofrance.atlassian.net/wiki/spaces/OpenDataMeteoFrance/pages/854851588/API%2BPaquet%2BObservations)
 - [Ground-observation field specification](https://donneespubliques.meteofrance.fr/client/document/descriptiftechnique_observations_donneespubliques_v2_20250315_403.pdf)
@@ -321,6 +327,6 @@ without a reproducible run.
 
 ## Remaining work
 
-- Automate renewal of the temporary Météo-France bearer token if this becomes
+- Automate renewal of the Météo-France application key if this becomes
   a scheduled process.
 - Shadow the path and complete the sensor-shift checks above.

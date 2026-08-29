@@ -2,6 +2,7 @@ import unittest
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from realtime_inference import observed_wind_onset
 from pioupiou.data.timestep import (
     cutoff_for_minutes,
     traverse_event_onset,
@@ -24,6 +25,29 @@ def observation(local_time: datetime, speed: float = 20.0, heading: float = 270.
 
 
 class TimestepTraverseTests(unittest.TestCase):
+    def test_realtime_onset_gate_waits_for_a_sustained_observed_run(self):
+        config = LabelConfig()
+        start = datetime(2024, 7, 1, 12, 5, tzinfo=LOCAL)
+        observations = [
+            observation(start + timedelta(minutes=5 * index))
+            for index in range(7)
+        ]
+        self.assertIsNone(
+            observed_wind_onset(
+                observations,
+                datetime(2024, 7, 1, 12, 29, tzinfo=LOCAL),
+                config,
+            )
+        )
+        self.assertEqual(
+            observed_wind_onset(
+                observations,
+                datetime(2024, 7, 1, 12, 36, tzinfo=LOCAL),
+                config,
+            ),
+            start,
+        )
+
     def test_positive_event_onset_starts_the_first_sustained_run(self):
         local_day = date(2024, 7, 1)
         config = LabelConfig(minimum_target_coverage=0.01)

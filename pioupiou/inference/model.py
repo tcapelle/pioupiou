@@ -39,6 +39,50 @@ from sklearn.pipeline import Pipeline
 FEATURE_PREFIXES = ("cal_", "piou_", "mf_")
 RANDOM_STATE = 20260807
 DEFAULT_TRAVERSE_SPEED_KMH = 10.0 * 1.852
+ONSET_HORIZON_MINUTES = (60, 120, 180)
+
+
+def onset_horizon_labels(frame: pd.DataFrame, horizon_minutes: int) -> np.ndarray:
+    """Label pre-onset rows whose first qualifying run starts within a horizon."""
+    if horizon_minutes not in ONSET_HORIZON_MINUTES:
+        raise ValueError(f"Unsupported onset horizon: {horizon_minutes}")
+    required = {"label", "meta_minutes_before_onset"}
+    missing = required.difference(frame.columns)
+    if missing:
+        raise ValueError(f"Onset labels require columns: {sorted(missing)}")
+    label = pd.to_numeric(frame["label"], errors="coerce").to_numpy(dtype=float)
+    lead = pd.to_numeric(
+        frame["meta_minutes_before_onset"], errors="coerce"
+    ).to_numpy(dtype=float)
+    positive = label == 1
+    if not np.isfinite(lead[positive]).all() or np.any(lead[positive] <= 0):
+        raise ValueError("Positive onset rows must be strictly before onset")
+    if np.isfinite(lead[~positive]).any():
+        raise ValueError("Negative onset rows must not have an event onset")
+    return (positive & (lead <= horizon_minutes)).astype(int)
+
+
+def onset_interval_labels(frame: pd.DataFrame) -> np.ndarray:
+    """Return 1 h, 1–2 h, 2–3 h, or later/no-onset interval classes."""
+    within_60 = onset_horizon_labels(frame, 60).astype(bool)
+    within_120 = onset_horizon_labels(frame, 120).astype(bool)
+    within_180 = onset_horizon_labels(frame, 180).astype(bool)
+    labels = np.full(len(frame), 3, dtype=int)
+    labels[within_180] = 2
+    labels[within_120] = 1
+    labels[within_60] = 0
+    return labels
+
+
+def day_equal_weights(frame: pd.DataFrame) -> np.ndarray:
+    """Give every day equal total fit weight, uniformly within each day."""
+    if "date" not in frame.columns:
+        return np.ones(len(frame), dtype=float)
+    counts = frame.groupby("date", sort=False)["date"].transform("size")
+    values = counts.to_numpy(dtype=float)
+    if not np.isfinite(values).all() or np.any(values <= 0):
+        raise ValueError("Each day must have a positive finite row count")
+    return 1.0 / values
 
 
 def sha256_file(path: Path | str) -> str:
@@ -197,7 +241,7 @@ def fit_pipeline(
     transformed = pipeline.named_steps["imputer"].transform(frame)
     if not np.isfinite(transformed).all():
         raise ValueError("Non-finite values remain after sklearn preprocessing")
-    probability = pipeline.predict_proba(frame)[:, 1]
+    probability = pipeline.predict_proba(frame)
     if not np.isfinite(probability).all():
         raise ValueError("The fitted sklearn classifier produced non-finite probabilities")
     return pipeline
@@ -213,6 +257,29 @@ def predict_probabilities(
     if not np.isfinite(probability).all():
         raise ValueError("The sklearn classifier produced non-finite probabilities")
     return probability
+
+
+def predict_onset_horizon_probabilities(
+    pipeline: Pipeline,
+    frame: pd.DataFrame,
+    feature_names: Sequence[str],
+) -> dict[int, np.ndarray]:
+    """Convert four mutually exclusive onset intervals to ordered cumulatives."""
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        probability = pipeline.predict_proba(
+            numeric_feature_frame(frame, feature_names)
+        )
+    classifier = pipeline.named_steps["classifier"]
+    classes = np.asarray(classifier.classes_, dtype=int)
+    if not np.array_equal(classes, np.arange(4)):
+        raise ValueError("Ordered onset model must contain interval classes 0, 1, 2, 3")
+    if not np.isfinite(probability).all():
+        raise ValueError("The ordered onset model produced non-finite probabilities")
+    return {
+        60: probability[:, 0],
+        120: probability[:, :2].sum(axis=1),
+        180: probability[:, :3].sum(axis=1),
+    }
 
 
 def feature_names(frame: pd.DataFrame) -> list[str]:
@@ -548,7 +615,8 @@ def train_and_evaluate(
     l2_candidates: Sequence[float] = (0.01, 0.1, 1.0, 10.0),
     smoke: bool = False,
     label_config: dict[str, Any] | None = None,
-) -> tuple[dict[str, Any], dict[str, dict[str, float]]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Evaluate chronologically, then refit the deployable model through test years."""
     train, validation, test = split_dataset(frame, smoke=smoke)
     selected_features = feature_names(train)
     candidates = (1.0,) if smoke else l2_candidates
@@ -610,7 +678,86 @@ def train_and_evaluate(
                 threshold,
                 anticipation_weights(subset),
             )
-    classifier = pipeline.named_steps["classifier"]
+
+    onset_pipeline: Pipeline | None = None
+    onset_thresholds: dict[str, float] = {}
+    if "meta_minutes_before_onset" in frame.columns:
+        evaluation_onset_pipeline = build_pipeline(best_l2, selected_features)
+        fit_pipeline(
+            evaluation_onset_pipeline,
+            numeric_feature_frame(train, selected_features),
+            onset_interval_labels(train),
+            day_equal_weights(train),
+        )
+        validation_onset_probability = predict_onset_horizon_probabilities(
+            evaluation_onset_pipeline, validation, selected_features
+        )
+        for horizon in ONSET_HORIZON_MINUTES:
+            target = onset_horizon_labels(validation, horizon)
+            onset_thresholds[str(horizon)] = select_threshold(
+                target, validation_onset_probability[horizon]
+            )
+        for split_name, subset in (
+            ("train", train),
+            ("validation", validation),
+            ("test", test),
+        ):
+            probabilities = predict_onset_horizon_probabilities(
+                evaluation_onset_pipeline, subset, selected_features
+            )
+            for horizon in ONSET_HORIZON_MINUTES:
+                metrics.setdefault(f"onset_horizon_{horizon}m", {})[
+                    split_name
+                ] = classification_metrics(
+                    onset_horizon_labels(subset, horizon),
+                    probabilities[horizon],
+                    onset_thresholds[str(horizon)],
+                )
+
+    deployment = pd.concat((train, validation, test)).sort_index()
+    deployment_pipeline = build_pipeline(best_l2, selected_features)
+    fit_pipeline(
+        deployment_pipeline,
+        numeric_feature_frame(deployment, selected_features),
+        deployment["label"].to_numpy(dtype=int),
+        day_normalized_anticipation_weights(deployment),
+    )
+    if onset_thresholds:
+        onset_pipeline = build_pipeline(best_l2, selected_features)
+        fit_pipeline(
+            onset_pipeline,
+            numeric_feature_frame(deployment, selected_features),
+            onset_interval_labels(deployment),
+            day_equal_weights(deployment),
+        )
+    later = frame[frame["year"] > test["year"].max()]
+    for year in sorted(later["year"].unique()):
+        subset = later[later["year"] == year]
+        probability = predict_probabilities(
+            deployment_pipeline, subset, selected_features
+        )
+        metrics[f"deployment_later_{int(year)}"] = {
+            **classification_metrics(
+                subset["label"].to_numpy(dtype=int),
+                probability,
+                threshold,
+                anticipation_weights(subset),
+            ),
+            **anticipation_metrics(subset, probability, threshold),
+        }
+        if onset_pipeline is not None:
+            onset_probabilities = predict_onset_horizon_probabilities(
+                onset_pipeline, subset, selected_features
+            )
+            metrics[f"onset_deployment_later_{int(year)}"] = {
+                f"horizon_{horizon}m": classification_metrics(
+                    onset_horizon_labels(subset, horizon),
+                    onset_probabilities[horizon],
+                    onset_thresholds[str(horizon)],
+                )
+                for horizon in ONSET_HORIZON_MINUTES
+            }
+    classifier = deployment_pipeline.named_steps["classifier"]
     metadata = {
         "schema_version": 2,
         "artifact_format": "joblib",
@@ -636,6 +783,10 @@ def train_and_evaluate(
         "selection": {
             "l2_event_day_3h_average_precision_by_candidate": cv_scores,
             "selection_data": "expanding_year_folds_within_training_years_only",
+            "deployment_refit": (
+                "same_frozen_architecture_and_validation_threshold_on_all_"
+                "completed_evaluation_years"
+            ),
         },
         "split": {
             "train_years": sorted(int(value) for value in train["year"].unique()),
@@ -644,6 +795,10 @@ def train_and_evaluate(
             "train_rows": len(train),
             "validation_rows": len(validation),
             "test_rows": len(test),
+            "deployment_fit_years": sorted(
+                int(value) for value in deployment["year"].unique()
+            ),
+            "deployment_fit_rows": len(deployment),
             "prediction_minutes": (
                 sorted(int(value) for value in frame["issue_minutes"].unique())
                 if "issue_minutes" in frame.columns
@@ -651,8 +806,34 @@ def train_and_evaluate(
             ),
         },
         "label": label_config or {"status": "not_supplied"},
+        "onset_model": (
+            {
+                "formulation": "four_exclusive_intervals_with_cumulative_outputs",
+                "intervals": [
+                    "within_60m",
+                    "over_60_through_120m",
+                    "over_120_through_180m",
+                    "over_180m_or_none",
+                ],
+                "horizons_minutes": list(ONSET_HORIZON_MINUTES),
+                "thresholds": onset_thresholds,
+                "fit_weighting": "equal_total_weight_per_day_uniform_within_day",
+                "prediction_condition": "no_qualifying_wind_onset_observed",
+                "deployment_fit_years": sorted(
+                    int(value) for value in deployment["year"].unique()
+                ),
+            }
+            if onset_pipeline is not None
+            else None
+        ),
     }
-    return {"metadata": metadata, "pipeline": pipeline}, metrics
+    bundle: dict[str, Any] = {
+        "metadata": metadata,
+        "pipeline": deployment_pipeline,
+    }
+    if onset_pipeline is not None:
+        bundle["onset_pipeline"] = onset_pipeline
+    return bundle, metrics
 
 
 def save_json(payload: dict[str, Any], path: Path | str) -> None:
@@ -675,7 +856,7 @@ def save_model_bundle(bundle: dict[str, Any], path: Path | str) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _deserialize_artifact(raw: bytes) -> tuple[dict[str, Any], Pipeline]:
+def _deserialize_bundle(raw: bytes) -> dict[str, Any]:
     """Deserialize trusted project output; joblib must never receive untrusted bytes."""
     try:
         bundle = joblib.load(io.BytesIO(raw))
@@ -697,26 +878,58 @@ def _deserialize_artifact(raw: bytes) -> tuple[dict[str, Any], Pipeline]:
     pipeline = bundle.get("pipeline")
     if not isinstance(pipeline, Pipeline):
         raise ValueError("Traverse model bundle does not contain a scikit-learn Pipeline")
-    return metadata, pipeline
+    onset_metadata = metadata.get("onset_model")
+    onset_pipeline = bundle.get("onset_pipeline")
+    if onset_metadata is not None:
+        if not isinstance(onset_metadata, dict) or not isinstance(
+            onset_pipeline, Pipeline
+        ):
+            raise ValueError("Traverse model bundle has an invalid ordered onset model")
+        if onset_metadata.get("horizons_minutes") != list(ONSET_HORIZON_MINUTES):
+            raise ValueError("Traverse model bundle has unsupported onset horizons")
+        classes = np.asarray(
+            onset_pipeline.named_steps["classifier"].classes_, dtype=int
+        )
+        if not np.array_equal(classes, np.arange(4)):
+            raise ValueError("Traverse onset model must contain interval classes 0, 1, 2, 3")
+    elif onset_pipeline is not None:
+        raise ValueError("Traverse model bundle has onset weights without metadata")
+    return bundle
 
 
-def load_artifact_with_sha256(
+def _deserialize_artifact(raw: bytes) -> tuple[dict[str, Any], Pipeline]:
+    bundle = _deserialize_bundle(raw)
+    return bundle["metadata"], bundle["pipeline"]
+
+
+def load_bundle_with_sha256(
     path: Path | str, expected_sha256: str | None = None
-) -> tuple[dict[str, Any], Pipeline, str]:
-    """Read once so validation, hashing, and scoring bind to identical bytes."""
+) -> tuple[dict[str, Any], str]:
+    """Read and validate the complete trusted model bundle exactly once."""
     raw = Path(path).read_bytes()
     actual_sha256 = hashlib.sha256(raw).hexdigest()
     if expected_sha256 is not None and not hmac.compare_digest(
         actual_sha256, expected_sha256
     ):
         raise ValueError("Traverse model SHA-256 does not match the trusted value")
-    metadata, pipeline = _deserialize_artifact(raw)
-    return metadata, pipeline, actual_sha256
+    return _deserialize_bundle(raw), actual_sha256
+
+
+def load_artifact_with_sha256(
+    path: Path | str, expected_sha256: str | None = None
+) -> tuple[dict[str, Any], Pipeline, str]:
+    """Read once so validation, hashing, and scoring bind to identical bytes."""
+    bundle, actual_sha256 = load_bundle_with_sha256(path, expected_sha256)
+    return bundle["metadata"], bundle["pipeline"], actual_sha256
 
 
 def load_artifact(path: Path | str) -> tuple[dict[str, Any], Pipeline]:
     metadata, pipeline, _ = load_artifact_with_sha256(path)
     return metadata, pipeline
+
+
+def load_bundle(path: Path | str) -> tuple[dict[str, Any], str]:
+    return load_bundle_with_sha256(path)
 
 
 def predict_loaded(
@@ -800,6 +1013,20 @@ def predict_loaded(
     # Keep the response shape stable while avoiding misleading tree attributions.
     contribution_rows: list[list[tuple[str, float]]] = [[] for _ in range(len(frame))]
     return probability, predicted, contribution_rows
+
+
+def predict_bundle_onset_probabilities(
+    bundle: dict[str, Any], frame: pd.DataFrame
+) -> dict[int, np.ndarray]:
+    """Score ordered pre-onset horizons when the bundle contains a companion model."""
+    onset_pipeline = bundle.get("onset_pipeline")
+    if onset_pipeline is None:
+        return {}
+    return predict_onset_horizon_probabilities(
+        onset_pipeline,
+        frame,
+        list(bundle["metadata"]["feature_names"]),
+    )
 
 
 def predict_frame(

@@ -1,7 +1,8 @@
 # Same-day Traverse predictor
 
-This repository contains one research model: an advance warning that a
-qualifying Traverse will begin later in today's fixed `[12:00, 20:00)` local
+This repository contains one research model bundle. Its primary output is an
+advance warning that a qualifying Traverse will begin later in today's fixed
+`[12:00, 20:00)` local
 window on a hot day from May through September, given observations available
 at the requested time. Dates outside May–September are outside the model
 population.
@@ -25,24 +26,37 @@ features are limited to:
 - temperature summaries from BELLEY, NOVALAISE, and MONT DU CHAT; and
 - explicit lowland, lake-side, and ridge temperature contrasts.
 
-All observations at or after the requested time are excluded. The chronological
-split is 2017–2022 training, 2023 validation, and 2024–2025 test.
+All observations at or after the requested time are excluded. Model selection
+and reporting use the chronological split 2017–2022 training, 2023 validation,
+and 2024–2025 test.
 L2 regularization is selected by event-day average precision at least three
 hours before onset. The threshold balances three-hour event alerts against
 false-alert days on validation data. The selected model uses `L2=10` and
 threshold `0.27567`. Fit weights preserve the lead-time value within each
 day, then normalize every day to equal total weight so days with more available
-checkpoints do not dominate training.
+checkpoints do not dominate training. After those choices and the test metrics
+are frozen, the serialized deployment pipeline is refit on every completed
+evaluation year, 2017–2025, without changing its architecture or threshold.
+
+The bundle also contains one ordered onset companion. It classifies each
+pre-onset row into onset within 1 hour, 1–2 hours, 2–3 hours, or later/no onset,
+then sums those mutually exclusive estimates into cumulative 1-, 2-, and
+3-hour probabilities. This guarantees `P(1 h) ≤ P(2 h) ≤ P(3 h)`, unlike three
+independently fitted binary models. It uses the same 94 inference-time features
+and uniform within-day, equal-per-day fit weights.
+The estimates have not received a separate probability-calibration fit.
 
 On the chronological 2024–2025 test years, three-hour event-day AP is `0.190`, ROC
 AUC is `0.717`, and false-alert days are `14.8%`; `34.8%` of events are alerted
-at least three hours early. On the later partial 2026 season, AP is `0.231`, AUC
-is `0.655`, false-alert days are `14.5%`, and the model alerts `30.0%` (3/10) at
-least three hours early. Compared with the preceding linear model, ranking
-improves and 2026 false alerts are halved, while 2024–2025 thresholded event
-coverage is lower. See the
-[current experiment record](experiments/20260818-hot-season-anticipation/plan.md)
-for the complete interpretation and the earlier
+at least three hours early. On the later partial 2026 season, the deployment
+refit reaches AP `0.267`, AUC `0.658`, and `50.0%` (5/10) three-hour event
+coverage with `15.6%` false-alert days. The otherwise identical model trained
+only through 2022 reaches AP `0.226`, alerts 3/10 events, and has the same
+false-alert rate. See the
+[deployment-refit experiment](experiments/20260825-deployment-refit/plan.md)
+and [ordered-onset audit](experiments/20260829-ordered-onset-deployment/plan.md),
+as well as the earlier [frozen-model record](experiments/20260818-hot-season-anticipation/plan.md),
+for the complete interpretation, plus the earlier
 [target](experiments/20260818-hot-season-multistation/plan.md) and
 [anticipation](experiments/20260817-lead-time-anticipation/plan.md) records for
 the experiment history.
@@ -88,9 +102,10 @@ uv run python -m scripts.predict \
 The JSON response includes the probability, thresholded decision, and a
 separate `onset_evidence` value: the latest westerly wind component as a
 fraction of the 18.52 km/h target, clipped to `[0, 1]`. This physical evidence
-index is not a second probability. Once qualifying wind has begun, treat the
-live observations as event monitoring rather than interpreting a later score
-as advance warning.
+index is not a second probability. `GET /predict` also returns ordered onset
+estimates under `onset_within_probabilities`. Once a sustained qualifying run
+is observable, the response status becomes `onset_observed` and those
+future-onset estimates are zeroed.
 
 With `METEOFRANCE_TOKEN` set, serve the current live prediction at
 `GET /predict`:
@@ -104,9 +119,10 @@ The same server exposes a historical dashboard at
 `http://127.0.0.1:8000/dashboard`. It shows wind-rule Traverse candidates by
 year and a shared 12:00–21:00 timeline with wind in knots, flow-direction
 needles, advance probability, physical onset evidence, the event-onset boundary,
-CHAMBERY-AIX temperature, and either cloud cover or solar radiation when cloud
-cover is unavailable. The 2026 view also compares event-day AP at three-, two-,
-and one-hour lead, and summarizes early-alert rate, false-alert days, median
+ordered 1-, 2-, and 3-hour onset estimates, CHAMBERY-AIX temperature, and either
+cloud cover or solar radiation when cloud cover is unavailable. The 2026 view
+also compares event-day AP at three-, two-,
+and one-hour lead and summarizes early-alert rate, false-alert days, median
 warning time, and the share of events whose onset evidence rises over the final
 six hours. Rule matches are candidates, not independently confirmed Traverse
 observations. Dashboard data is built from

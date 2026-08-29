@@ -9,6 +9,7 @@ import json
 import os
 import platform
 from pathlib import Path
+from typing import Any
 
 import joblib
 import numpy as np
@@ -93,13 +94,19 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def flatten_metrics(metrics: dict[str, dict[str, float]]) -> dict[str, float]:
-    return {
-        f"{split}/{name}": float(value)
-        for split, values in metrics.items()
-        for name, value in values.items()
-        if np.isfinite(value)
-    }
+def flatten_metrics(metrics: dict[str, Any]) -> dict[str, float]:
+    flat: dict[str, float] = {}
+
+    def visit(prefix: str, values: dict[str, Any]) -> None:
+        for name, value in values.items():
+            key = f"{prefix}/{name}" if prefix else name
+            if isinstance(value, dict):
+                visit(key, value)
+            elif np.isfinite(value):
+                flat[key] = float(value)
+
+    visit("", metrics)
+    return flat
 
 
 def main() -> int:
@@ -312,6 +319,16 @@ def main() -> int:
         "threshold": artifact["model"]["threshold"],
         "l2": artifact["model"]["l2"],
         "test": metrics["test"],
+        "deployment_later": {
+            name: values
+            for name, values in metrics.items()
+            if name.startswith("deployment_later_")
+        },
+        "onset_deployment_later": {
+            name: values
+            for name, values in metrics.items()
+            if name.startswith("onset_deployment_later_")
+        },
     }
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
