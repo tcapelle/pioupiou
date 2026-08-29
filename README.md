@@ -130,25 +130,40 @@ the local archives on first load and then cached in memory.
 
 ## Publish the live GitHub Pages prediction
 
-The static page in `docs/` reads the latest result from
-`live-data/current_prediction.json`. Enable GitHub Pages from the `main`
-branch's `/docs` directory once. Publish one result from the inference computer:
+The public page at <https://tcapelle.github.io/pioupiou/> reads the latest result
+from `live-data/current_prediction.json`. GitHub Pages is configured to serve
+`main/docs`, while the inference computer updates only the data branch.
+
+### Run the publisher in a terminal
+
+Open a fresh terminal in this repository and confirm the local prerequisites:
 
 ```bash
-uv run --frozen python -m scripts.publish_live
+cd /path/to/pioupiou
+uv sync --frozen
+test -f artifacts/traverse_model.joblib
+test -n "$METEOFRANCE_TOKEN"
+git ls-remote origin HEAD
 ```
 
-The publisher force-replaces the `live-data` branch with one root commit, so
-five-minute updates do not accumulate Git history. Keep it running with:
+The two `test` commands produce no output when successful. Set
+`METEOFRANCE_TOKEN` in that terminal first if the second command fails. Inspect
+one result locally without pushing:
 
 ```bash
-TRAVERSE_MODEL=artifacts/traverse_model.joblib \
-  uv run --frozen python -m scripts.publish_live --watch --interval 300
+uv run --frozen python -m scripts.publish_live --dry-run
 ```
 
-This requires Git push access and `METEOFRANCE_TOKEN`. The page marks results
-stale after 15 minutes. Use `--dry-run` to inspect the public JSON without
-pushing.
+Then start the publisher and leave the terminal open:
+
+```bash
+uv run --frozen python -m scripts.publish_live --watch --interval 300
+```
+
+It publishes immediately, then every five minutes. Stop it with `Ctrl-C`; rerun
+the same command after restarting the terminal or computer. The publisher
+force-replaces the `live-data` branch with one root commit, so updates do not
+accumulate Git history. The page marks a result stale after 15 minutes.
 
 `joblib` uses pickle semantics. Load only trusted model bundles. A downloaded
 artifact can be checked before deserialization with `--model-sha256`.
