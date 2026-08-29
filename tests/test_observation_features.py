@@ -9,6 +9,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from realtime_inference import (
+    current_wind,
     fetch_json,
     meteofrance_department_url,
     meteofrance_observations,
@@ -102,6 +103,21 @@ class ObservationFeatureTests(unittest.TestCase):
             self.config,
         )
         self.assertEqual(features["piou_last_wind_avg_kmh"], 7.0)
+
+    def test_current_wind_serializes_latest_observation_before_cutoff(self):
+        before = datetime(2024, 7, 1, 11, 55, tzinfo=LOCAL)
+        cutoff = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)
+        result = current_wind(
+            [
+                observation(before, speed=18.52, heading=270.0),
+                observation(cutoff, speed=99.0, heading=90.0),
+            ],
+            cutoff,
+        )
+        self.assertEqual(result["average_kmh"], 18.52)
+        self.assertEqual(result["gust_kmh"], 20.52)
+        self.assertEqual(result["direction_degrees"], 270.0)
+        self.assertEqual(result["age_minutes"], 5.0)
 
     def test_piou_rows_are_deduplicated_and_location_guarded(self):
         timestamp = datetime(2024, 7, 1, 11, 0, tzinfo=LOCAL)

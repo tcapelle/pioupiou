@@ -159,6 +159,24 @@ def observed_wind_onset(
     return qualifying_wind_summary(observed, cutoff, config)["event_onset"]
 
 
+def current_wind(
+    observations: Sequence[PiouObservation], cutoff: datetime
+) -> dict[str, Any]:
+    """Serialize the newest station observation strictly before the issue time."""
+    available = [item for item in observations if item.timestamp_local < cutoff]
+    if not available:
+        raise ValueError("insufficient_data: no current Windbird observation")
+    latest = max(available, key=lambda item: item.timestamp_utc)
+    return {
+        "observation_time": latest.timestamp_local.isoformat(),
+        "age_minutes": (cutoff - latest.timestamp_local).total_seconds() / 60.0,
+        "minimum_kmh": latest.wind_speed_min_kmh,
+        "average_kmh": latest.wind_speed_avg_kmh,
+        "gust_kmh": latest.wind_speed_max_kmh,
+        "direction_degrees": latest.wind_heading_degrees,
+    }
+
+
 def predict_now(
     model: Path = Path("artifacts/traverse_model.joblib"),
 ) -> dict[str, Any]:
@@ -172,9 +190,19 @@ def predict_now(
     config = label_config_from_payload(payload["label"])
     local_timezone = ZoneInfo(config.timezone_name)
     cutoff = datetime.now(local_timezone).replace(second=0, microsecond=0)
+    piou_payload = fetch_json(PIOU_URL)
+    piou_observations = piou_observations_from_archive_payload(
+        piou_payload, local_timezone
+    )
+    latest_wind = current_wind(piou_observations, cutoff)
     issue_minutes = cutoff.hour * 60 + cutoff.minute
     if not 6 * 60 + 30 <= issue_minutes < 20 * 60:
-        raise ValueError("Current time is outside the model's 06:30-19:59 window")
+        return {
+            "prediction_time": cutoff.isoformat(),
+            "model_sha256": model_sha256,
+            "status": "outside_prediction_window",
+            "current_wind": latest_wind,
+        }
     if not is_traverse_season(cutoff.date(), config):
         return {
             "prediction_time": cutoff.isoformat(),
@@ -182,12 +210,9 @@ def predict_now(
             "status": "outside_traverse_season",
             "traverse_probability": 0.0,
             "predict_traverse": False,
+            "current_wind": latest_wind,
         }
 
-    piou_payload = fetch_json(PIOU_URL)
-    piou_observations = piou_observations_from_archive_payload(
-        piou_payload, local_timezone
-    )
     piou = piou_features(
         cutoff.date(), piou_observations, config, cutoff_local=cutoff
     )
@@ -243,6 +268,7 @@ def predict_now(
         ),
         "piou_observation_time": piou_latest.isoformat(),
         "piou_last_age_minutes": piou["piou_last_age_minutes"],
+        "current_wind": latest_wind,
         "mf_observation_time": meteo_observations[PRIMARY_WEATHER_STATION.slug][-1][
             "timestamp_local"
         ].isoformat(),
