@@ -27,6 +27,12 @@
     .source-link { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid rgb(16 45 66 / 14%); border-radius:999px; background:rgb(255 255 255 / 45%); color:var(--blue-deep); font-size:13px; font-weight:700; text-decoration:none; backdrop-filter:blur(12px); transition:transform .18s ease,border-color .18s ease,background .18s ease; }
     .source-link:hover { transform:translateY(-2px); border-color:rgb(14 113 129 / 38%); background:rgb(255 255 255 / 72%); }
     .live-dot { width:8px; height:8px; border-radius:50%; background:#39a66d; box-shadow:0 0 0 5px rgb(57 166 109 / 12%); }
+    .tabs { display:inline-flex; gap:4px; margin:-12px 0 24px; padding:4px; border:1px solid rgb(16 45 66 / 10%); border-radius:14px; background:rgb(255 255 255 / 42%); backdrop-filter:blur(12px); }
+    .tab { min-height:40px; padding:0 16px; border:0; border-radius:10px; background:transparent; color:var(--muted); font:inherit; font-size:13px; font-weight:750; cursor:pointer; transition:color .18s ease,background .18s ease,box-shadow .18s ease; }
+    .tab:hover { color:var(--ink); }
+    .tab[aria-selected="true"] { background:var(--card); color:var(--blue-deep); box-shadow:0 5px 16px rgb(30 55 59 / 10%); }
+    .tab:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+    .tab-panel[hidden] { display:none; }
     .audit { margin-bottom:18px; padding:22px 26px; }
     .audit-head { display:flex; justify-content:space-between; gap:20px; align-items:baseline; margin-bottom:18px; }
     .audit-head p { margin:0; color:var(--muted); font-size:12px; }
@@ -106,65 +112,73 @@
         <a class="source-link" href="https://github.com/tcapelle/pioupiou" target="_blank" rel="noreferrer">GitHub repo ↗</a>
       </nav>
     </header>
-    <section id="audit" class="card audit" hidden>
-      <div class="audit-head"><div class="eyebrow">2026 model audit</div><p id="audit-through"></p></div>
-      <div class="audit-grid">
-        <div class="audit-stat"><b id="audit-events">–</b>Traverse event days<small id="audit-event-detail"></small></div>
-        <div class="audit-stat"><b id="audit-false-alerts">–</b>false-alert days<small id="audit-negative-detail"></small></div>
-        <div class="audit-stat"><b id="audit-ap">–</b>average precision<small>event-day ranking at ≥3 h lead</small></div>
-        <div class="audit-stat"><b id="audit-warning">–</b>median warning<small>among alerted event days</small></div>
+    <nav class="tabs" role="tablist" aria-label="Forecast views">
+      <button id="tab-live" class="tab" role="tab" aria-selected="true" aria-controls="panel-live" data-tab="live">Live</button>
+      <button id="tab-explore" class="tab" role="tab" aria-selected="false" aria-controls="panel-explore" data-tab="explore">Audit &amp; explore</button>
+    </nav>
+    <section id="panel-live" class="tab-panel" role="tabpanel" aria-labelledby="tab-live">
+      <div class="cards" aria-live="polite">
+        <section class="card">
+          <div class="topline">
+            <div><div class="eyebrow">Traverse outlook</div><div id="issued">Loading live prediction…</div></div>
+            <span id="status" class="status offline">Loading</span>
+          </div>
+          <div id="result" hidden>
+            <div id="probability" class="probability">–</div>
+            <div class="probability-label">chance of a qualifying Traverse later today</div>
+            <div class="meter"><span id="meter"></span></div>
+            <div class="metrics">
+              <span><b id="onset">–</b>onset within 3 hours</span>
+              <span><b id="evidence">–</b>physical onset evidence</span>
+              <span><b id="freshness">–</b>latest wind observation</span>
+            </div>
+          </div>
+          <p id="message"></p>
+        </section>
+        <section class="card wind-card">
+          <div><div class="eyebrow">Wind now · PiouPiou 2176</div><div id="wind-time">Waiting for station data…</div></div>
+          <div id="wind-result" hidden>
+            <div class="wind-reading">
+              <div id="wind-speed" class="wind-speed">–<small>average</small></div>
+              <div id="wind-arrow" class="wind-arrow" aria-hidden="true">↑</div>
+            </div>
+            <div class="wind-details">
+              <span><b id="wind-gust">–</b>gust</span>
+              <span><b id="wind-direction">–</b>from</span>
+            </div>
+            <a class="wind-source" href="https://www.openwindmap.org/windbird-2176" target="_blank" rel="noreferrer">View PiouPiou 2176 on OpenWindMap ↗</a>
+          </div>
+        </section>
       </div>
     </section>
-    <div class="cards" aria-live="polite">
-      <section class="card">
-        <div class="topline">
-          <div><div class="eyebrow">Traverse outlook</div><div id="issued">Loading live prediction…</div></div>
-          <span id="status" class="status offline">Loading</span>
-        </div>
-        <div id="result" hidden>
-          <div id="probability" class="probability">–</div>
-          <div class="probability-label">chance of a qualifying Traverse later today</div>
-          <div class="meter"><span id="meter"></span></div>
-          <div class="metrics">
-            <span><b id="onset">–</b>onset within 3 hours</span>
-            <span><b id="evidence">–</b>physical onset evidence</span>
-            <span><b id="freshness">–</b>latest wind observation</span>
-          </div>
-        </div>
-        <p id="message"></p>
-      </section>
-      <section class="card wind-card">
-        <div><div class="eyebrow">Wind now · PiouPiou 2176</div><div id="wind-time">Waiting for station data…</div></div>
-        <div id="wind-result" hidden>
-          <div class="wind-reading">
-            <div id="wind-speed" class="wind-speed">–<small>average</small></div>
-            <div id="wind-arrow" class="wind-arrow" aria-hidden="true">↑</div>
-          </div>
-          <div class="wind-details">
-            <span><b id="wind-gust">–</b>gust</span>
-            <span><b id="wind-direction">–</b>from</span>
-          </div>
-          <a class="wind-source" href="https://www.openwindmap.org/windbird-2176" target="_blank" rel="noreferrer">View PiouPiou 2176 on OpenWindMap ↗</a>
+    <section id="panel-explore" class="tab-panel" role="tabpanel" aria-labelledby="tab-explore" hidden>
+      <section id="audit" class="card audit" hidden>
+        <div class="audit-head"><div class="eyebrow">2026 model audit</div><p id="audit-through"></p></div>
+        <div class="audit-grid">
+          <div class="audit-stat"><b id="audit-events">–</b>Traverse event days<small id="audit-event-detail"></small></div>
+          <div class="audit-stat"><b id="audit-false-alerts">–</b>false-alert days<small id="audit-negative-detail"></small></div>
+          <div class="audit-stat"><b id="audit-ap">–</b>average precision<small>event-day ranking at ≥3 h lead</small></div>
+          <div class="audit-stat"><b id="audit-warning">–</b>median warning<small>among alerted event days</small></div>
         </div>
       </section>
-    </div>
-    <section id="archive" class="card archive" hidden>
-      <div class="archive-head">
-        <div><div class="eyebrow">2026 archive</div><h2 class="archive-title">Browse previous days</h2></div>
-        <div class="archive-controls">
-          <button id="archive-previous" aria-label="Previous date">‹</button>
-          <select id="archive-date" aria-label="Archived date"></select>
-          <button id="archive-next" aria-label="Next date">›</button>
+      <section id="archive" class="card archive" hidden>
+        <div class="archive-head">
+          <div><div class="eyebrow">2026 archive</div><h2 class="archive-title">Browse previous days</h2></div>
+          <div class="archive-controls">
+            <button id="archive-previous" aria-label="Previous date">‹</button>
+            <select id="archive-date" aria-label="Archived date"></select>
+            <button id="archive-next" aria-label="Next date">›</button>
+          </div>
         </div>
-      </div>
-      <div class="archive-meta"><span id="archive-event" class="archive-badge"></span><span id="archive-source" class="archive-note"></span></div>
-      <svg id="archive-chart" class="archive-chart" viewBox="0 0 880 330" role="img" aria-label="Daily wind and Traverse probability timeline"></svg>
-      <div class="chart-legend"><span><i class="legend-line"></i>Traverse probability</span><span><i class="legend-line wind"></i>average wind</span><span><i class="legend-line gust"></i>gust</span></div>
-      <div class="archive-summary">
-        <span><b id="archive-max-probability">–</b>maximum probability</span>
-        <span><b id="archive-peak-gust">–</b>peak gust</span>
-        <span><b id="archive-points">–</b>prediction checkpoints</span>
-      </div>
+        <div class="archive-meta"><span id="archive-event" class="archive-badge"></span><span id="archive-source" class="archive-note"></span></div>
+        <svg id="archive-chart" class="archive-chart" viewBox="0 0 880 330" role="img" aria-label="Daily wind and Traverse probability timeline"></svg>
+        <div class="chart-legend"><span><i class="legend-line"></i>Traverse probability</span><span><i class="legend-line wind"></i>average wind</span><span><i class="legend-line gust"></i>gust</span></div>
+        <div class="archive-summary">
+          <span><b id="archive-max-probability">–</b>maximum probability</span>
+          <span><b id="archive-peak-gust">–</b>peak gust</span>
+          <span><b id="archive-points">–</b>prediction checkpoints</span>
+        </div>
+      </section>
     </section>
     <footer class="footer">
       <p class="note">Experimental research signal, not a safety forecast. Stale results are marked automatically.</p>
@@ -176,6 +190,33 @@
     const DATA_URL = `${DATA_BASE}/current_prediction.json`;
     const archiveState = { dates: [], index: 0 };
     const byId = id => document.getElementById(id);
+    const tabButtons = [...document.querySelectorAll("[role=tab]")];
+    const activateTab = (name, updateUrl = false) => {
+      tabButtons.forEach(button => {
+        const selected = button.dataset.tab === name;
+        button.setAttribute("aria-selected", String(selected));
+        button.tabIndex = selected ? 0 : -1;
+      });
+      byId("panel-live").hidden = name !== "live";
+      byId("panel-explore").hidden = name !== "explore";
+      if (updateUrl) {
+        const url = name === "explore" ? "#explore" : `${location.pathname}${location.search}`;
+        history.pushState({ tab:name }, "", url);
+      }
+    };
+    tabButtons.forEach((button, index) => {
+      button.addEventListener("click", () => activateTab(button.dataset.tab, true));
+      button.addEventListener("keydown", event => {
+        if (!["ArrowLeft","ArrowRight"].includes(event.key)) return;
+        event.preventDefault();
+        const offset = event.key === "ArrowRight" ? 1 : -1;
+        const next = tabButtons[(index + offset + tabButtons.length) % tabButtons.length];
+        next.focus();
+        activateTab(next.dataset.tab, true);
+      });
+    });
+    addEventListener("popstate", () => activateTab(location.hash === "#explore" ? "explore" : "live"));
+    activateTab(location.hash === "#explore" ? "explore" : "live");
     const percent = value => `${Math.round(100 * Number(value))}%`;
     const knots = value => Number(value) / 1.852;
     const compass = degrees => ["N","NE","E","SE","S","SW","W","NW"][Math.round(Number(degrees) / 45) % 8];
