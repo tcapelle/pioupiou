@@ -195,12 +195,12 @@ def main() -> int:
     flat = flatten_metrics(metrics)
     flat.update(
         {
-            "train/log_loss": metrics["train"]["log_loss"],
+            "cross_validation/log_loss": metrics["cross_validation"]["log_loss"],
             "data/train_rows": float(artifact["split"]["train_rows"]),
             "model/l2": float(artifact["model"]["l2"]),
             "model/n_iter": float(artifact["model"]["iterations"]),
             "preprocessing/output_features": float(len(artifact["feature_names"])),
-            "validation/selected_threshold": float(artifact["model"]["threshold"]),
+            "cross_validation/selected_threshold": float(artifact["model"]["threshold"]),
         }
     )
     mode = args.wandb_mode
@@ -210,7 +210,7 @@ def main() -> int:
         import wandb
 
         configured_l2_candidates = [1.0] if args.smoke else list(l2_candidates)
-        selection_years = [2018, 2019] if args.smoke else [2020, 2021, 2022]
+        selection_years = artifact["split"]["cross_validation_years"]
         run = wandb.init(
             project=args.wandb_project,
             name=args.wandb_name,
@@ -242,11 +242,11 @@ def main() -> int:
                     "l2_candidates": configured_l2_candidates,
                     "selection_metric": "event_day_3h_average_precision",
                     "folds": "expanding_year",
-                    "validation_years": selection_years,
+                    "out_of_fold_years": selection_years,
                     "tie_break": "weaker_regularization",
                 },
                 "threshold_policy": {
-                    "selection_split": "validation",
+                    "selection_split": "rolling_out_of_fold",
                     "objective": "event_day_3h_balanced_accuracy",
                     "tie_break": "f1_then_closest_to_0.5",
                     "decision_rule": "probability_gte_threshold",
@@ -319,16 +319,7 @@ def main() -> int:
         "threshold": artifact["model"]["threshold"],
         "l2": artifact["model"]["l2"],
         "test": metrics["test"],
-        "deployment_later": {
-            name: values
-            for name, values in metrics.items()
-            if name.startswith("deployment_later_")
-        },
-        "onset_deployment_later": {
-            name: values
-            for name, values in metrics.items()
-            if name.startswith("onset_deployment_later_")
-        },
+        "cross_validation": metrics["cross_validation"],
     }
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0

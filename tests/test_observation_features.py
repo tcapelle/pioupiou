@@ -92,6 +92,15 @@ class ObservationFeatureTests(unittest.TestCase):
         winter = date(2024, 12, 1)
         self.assertIsNone(target_label(winter, values, self.config))
 
+    def test_legacy_hot_day_config_does_not_gate_the_wind_target(self):
+        start = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)
+        values = [observation(start + timedelta(minutes=4 * index)) for index in range(8)]
+        config = LabelConfig(
+            minimum_target_coverage=0.0,
+            hot_day_temperature_threshold_c=100.0,
+        )
+        self.assertEqual(target_label(self.day, values, config)["label"], 1)
+
     def test_piou_features_exclude_the_cutoff(self):
         before = datetime(2024, 7, 1, 11, 56, tzinfo=LOCAL)
         at_noon = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)

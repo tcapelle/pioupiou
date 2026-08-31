@@ -230,7 +230,7 @@ class TraverseModelTests(unittest.TestCase):
         self.assertTrue(np.isnan(result.iloc[0]["a"]))
         self.assertEqual(result.iloc[0]["b"], 2.0)
 
-    def test_threshold_uses_validation_balanced_accuracy(self):
+    def test_threshold_uses_balanced_accuracy(self):
         y = np.array([0, 0, 1, 1])
         probability = np.array([0.1, 0.4, 0.5, 0.9])
         self.assertEqual(select_threshold(y, probability), 0.5)
@@ -334,13 +334,17 @@ class TraverseModelTests(unittest.TestCase):
             bundle["metadata"]["model"]["fit_weighting"],
             "equal_total_weight_per_day_within_day_lead_weight",
         )
-        self.assertEqual(metrics["test"]["rows"], 4.0)
+        self.assertEqual(metrics["test"]["rows"], 2.0)
         self.assertEqual(
-            bundle["metadata"]["split"]["deployment_fit_years"],
+            bundle["metadata"]["split"]["train_years"],
             list(range(2017, 2026)),
         )
-        self.assertEqual(bundle["metadata"]["split"]["deployment_fit_rows"], 18)
-        self.assertEqual(metrics["deployment_later_2026"]["rows"], 2.0)
+        self.assertEqual(bundle["metadata"]["split"]["train_rows"], 18)
+        self.assertEqual(
+            bundle["metadata"]["split"]["cross_validation_years"],
+            list(range(2020, 2026)),
+        )
+        self.assertEqual(metrics["cross_validation"]["rows"], 12.0)
 
     def test_joblib_round_trip_and_hash_check(self):
         with tempfile.TemporaryDirectory() as directory:

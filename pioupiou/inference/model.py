@@ -517,8 +517,7 @@ def expanding_year_l2_search(
     feature_names: Sequence[str],
     candidates: Iterable[float],
 ) -> tuple[float, dict[str, float]]:
-    years = sorted(int(year) for year in training["year"].unique())
-    validation_years = years[-3:] if len(years) >= 4 else years[1:]
+    validation_years = rolling_validation_years(training)
     scores: dict[str, float] = {}
     for candidate in candidates:
         fold_scores: list[float] = []
@@ -561,6 +560,76 @@ def expanding_year_l2_search(
     return max(finite)[2], scores
 
 
+def rolling_validation_years(training: pd.DataFrame) -> list[int]:
+    """Use every year with at least three earlier training years as an OOF fold."""
+    years = sorted(int(year) for year in training["year"].unique())
+    if len(years) < 2:
+        raise ValueError("Rolling validation requires at least two training years")
+    return years[3:] if len(years) >= 4 else years[1:]
+
+
+def expanding_year_probabilities(
+    training: pd.DataFrame,
+    feature_names: Sequence[str],
+    l2: float,
+) -> tuple[pd.DataFrame, np.ndarray]:
+    """Return chronological out-of-fold rows and primary probabilities."""
+    frames: list[pd.DataFrame] = []
+    probabilities: list[np.ndarray] = []
+    for validation_year in rolling_validation_years(training):
+        fold_train = training[training["year"] < validation_year]
+        fold_valid = training[training["year"] == validation_year]
+        if len(fold_train) == 0 or fold_valid["label"].nunique() < 2:
+            continue
+        pipeline = build_pipeline(l2, feature_names)
+        fit_pipeline(
+            pipeline,
+            numeric_feature_frame(fold_train, feature_names),
+            fold_train["label"].to_numpy(dtype=int),
+            day_normalized_anticipation_weights(fold_train),
+        )
+        frames.append(fold_valid)
+        probabilities.append(
+            predict_probabilities(pipeline, fold_valid, feature_names)
+        )
+    if not frames:
+        raise ValueError("No valid expanding-year prediction folds")
+    return pd.concat(frames, ignore_index=True), np.concatenate(probabilities)
+
+
+def expanding_year_onset_probabilities(
+    training: pd.DataFrame,
+    feature_names: Sequence[str],
+    l2: float,
+) -> tuple[pd.DataFrame, dict[int, np.ndarray]]:
+    """Return chronological out-of-fold rows and ordered onset probabilities."""
+    frames: list[pd.DataFrame] = []
+    probabilities = {horizon: [] for horizon in ONSET_HORIZON_MINUTES}
+    for validation_year in rolling_validation_years(training):
+        fold_train = training[training["year"] < validation_year]
+        fold_valid = training[training["year"] == validation_year]
+        if len(fold_train) == 0:
+            continue
+        pipeline = build_pipeline(l2, feature_names)
+        fit_pipeline(
+            pipeline,
+            numeric_feature_frame(fold_train, feature_names),
+            onset_interval_labels(fold_train),
+            day_equal_weights(fold_train),
+        )
+        fold_probability = predict_onset_horizon_probabilities(
+            pipeline, fold_valid, feature_names
+        )
+        frames.append(fold_valid)
+        for horizon in ONSET_HORIZON_MINUTES:
+            probabilities[horizon].append(fold_probability[horizon])
+    if not frames:
+        raise ValueError("No valid expanding-year onset folds")
+    return pd.concat(frames, ignore_index=True), {
+        horizon: np.concatenate(values) for horizon, values in probabilities.items()
+    }
+
+
 def load_dataset(path: Path | str) -> pd.DataFrame:
     frame = pd.read_csv(path)
     required = {"date", "year", "label"}
@@ -596,18 +665,16 @@ def load_dataset(path: Path | str) -> pd.DataFrame:
 
 def split_dataset(
     frame: pd.DataFrame, smoke: bool = False
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     if smoke:
-        train = frame[(frame["year"] >= 2017) & (frame["year"] <= 2019)]
-        validation = frame[frame["year"] == 2020]
+        train = frame[(frame["year"] >= 2017) & (frame["year"] <= 2020)]
         test = frame[frame["year"] == 2021]
     else:
-        train = frame[(frame["year"] >= 2017) & (frame["year"] <= 2022)]
-        validation = frame[frame["year"] == 2023]
-        test = frame[(frame["year"] >= 2024) & (frame["year"] <= 2025)]
-    if min(len(train), len(validation), len(test)) == 0:
+        train = frame[(frame["year"] >= 2017) & (frame["year"] <= 2025)]
+        test = frame[frame["year"] == 2026]
+    if min(len(train), len(test)) == 0:
         raise ValueError("Chronological split is empty; check dataset coverage")
-    return train, validation, test
+    return train, test
 
 
 def train_and_evaluate(
@@ -616,13 +683,71 @@ def train_and_evaluate(
     smoke: bool = False,
     label_config: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Evaluate chronologically, then refit the deployable model through test years."""
-    train, validation, test = split_dataset(frame, smoke=smoke)
+    """Select within history, fit through 2025, and evaluate once on 2026."""
+    train, test = split_dataset(frame, smoke=smoke)
     selected_features = feature_names(train)
     candidates = (1.0,) if smoke else l2_candidates
     best_l2, cv_scores = expanding_year_l2_search(
         train, selected_features, candidates
     )
+    cv_frame, cv_probability = expanding_year_probabilities(
+        train, selected_features, best_l2
+    )
+    threshold = (
+        select_anticipation_threshold(cv_frame, cv_probability)
+        if "meta_minutes_before_onset" in cv_frame.columns
+        else select_threshold(
+            cv_frame["label"].to_numpy(),
+            cv_probability,
+            anticipation_weights(cv_frame),
+        )
+    )
+    metrics = {
+        "cross_validation": {
+            **classification_metrics(
+                cv_frame["label"].to_numpy(dtype=int),
+                cv_probability,
+                threshold,
+                anticipation_weights(cv_frame),
+            ),
+            **anticipation_metrics(cv_frame, cv_probability, threshold),
+        }
+    }
+    for year in rolling_validation_years(train):
+        mask = cv_frame["year"] == year
+        if not mask.any():
+            continue
+        subset = cv_frame[mask]
+        probability = cv_probability[mask.to_numpy()]
+        metrics[f"cross_validation_{year}"] = {
+            **classification_metrics(
+                subset["label"].to_numpy(dtype=int),
+                probability,
+                threshold,
+                anticipation_weights(subset),
+            ),
+            **anticipation_metrics(subset, probability, threshold),
+        }
+
+    onset_pipeline: Pipeline | None = None
+    onset_thresholds: dict[str, float] = {}
+    if "meta_minutes_before_onset" in frame.columns:
+        onset_cv_frame, onset_cv_probability = expanding_year_onset_probabilities(
+            train, selected_features, best_l2
+        )
+        for horizon in ONSET_HORIZON_MINUTES:
+            target = onset_horizon_labels(onset_cv_frame, horizon)
+            onset_thresholds[str(horizon)] = select_threshold(
+                target, onset_cv_probability[horizon]
+            )
+            metrics.setdefault(f"onset_horizon_{horizon}m", {})[
+                "cross_validation"
+            ] = classification_metrics(
+                target,
+                onset_cv_probability[horizon],
+                onset_thresholds[str(horizon)],
+            )
+
     pipeline = build_pipeline(best_l2, selected_features)
     fit_pipeline(
         pipeline,
@@ -630,134 +755,37 @@ def train_and_evaluate(
         train["label"].to_numpy(dtype=int),
         day_normalized_anticipation_weights(train),
     )
-    validation_probability = predict_probabilities(
-        pipeline, validation, selected_features
-    )
-    threshold = (
-        select_anticipation_threshold(validation, validation_probability)
-        if "meta_minutes_before_onset" in validation.columns
-        else select_threshold(
-            validation["label"].to_numpy(),
-            validation_probability,
-            anticipation_weights(validation),
-        )
-    )
-    metrics = {}
-    for split_name, subset in (
-        ("train", train),
-        ("validation", validation),
-        ("test", test),
-    ):
-        probability = predict_probabilities(pipeline, subset, selected_features)
-        metrics[split_name] = {
-            **classification_metrics(
-                subset["label"].to_numpy(dtype=int),
-                probability,
-                threshold,
-                anticipation_weights(subset),
-            ),
-            **anticipation_metrics(subset, probability, threshold),
-        }
-    for year in sorted(test["year"].unique()):
-        subset = test[test["year"] == year]
-        metrics[f"test_{int(year)}"] = classification_metrics(
-            subset["label"].to_numpy(dtype=int),
-            predict_probabilities(pipeline, subset, selected_features),
-            threshold,
-            anticipation_weights(subset),
-        )
-    if "issue_minutes" in test.columns:
-        for issue_minutes in sorted(test["issue_minutes"].unique()):
-            subset = test[test["issue_minutes"] == issue_minutes]
-            if subset["label"].nunique() < 2:
-                continue
-            hour, minute = divmod(int(issue_minutes), 60)
-            metrics[f"test_time_{hour:02d}{minute:02d}"] = classification_metrics(
-                subset["label"].to_numpy(dtype=int),
-                predict_probabilities(pipeline, subset, selected_features),
-                threshold,
-                anticipation_weights(subset),
-            )
-
-    onset_pipeline: Pipeline | None = None
-    onset_thresholds: dict[str, float] = {}
-    if "meta_minutes_before_onset" in frame.columns:
-        evaluation_onset_pipeline = build_pipeline(best_l2, selected_features)
-        fit_pipeline(
-            evaluation_onset_pipeline,
-            numeric_feature_frame(train, selected_features),
-            onset_interval_labels(train),
-            day_equal_weights(train),
-        )
-        validation_onset_probability = predict_onset_horizon_probabilities(
-            evaluation_onset_pipeline, validation, selected_features
-        )
-        for horizon in ONSET_HORIZON_MINUTES:
-            target = onset_horizon_labels(validation, horizon)
-            onset_thresholds[str(horizon)] = select_threshold(
-                target, validation_onset_probability[horizon]
-            )
-        for split_name, subset in (
-            ("train", train),
-            ("validation", validation),
-            ("test", test),
-        ):
-            probabilities = predict_onset_horizon_probabilities(
-                evaluation_onset_pipeline, subset, selected_features
-            )
-            for horizon in ONSET_HORIZON_MINUTES:
-                metrics.setdefault(f"onset_horizon_{horizon}m", {})[
-                    split_name
-                ] = classification_metrics(
-                    onset_horizon_labels(subset, horizon),
-                    probabilities[horizon],
-                    onset_thresholds[str(horizon)],
-                )
-
-    deployment = pd.concat((train, validation, test)).sort_index()
-    deployment_pipeline = build_pipeline(best_l2, selected_features)
-    fit_pipeline(
-        deployment_pipeline,
-        numeric_feature_frame(deployment, selected_features),
-        deployment["label"].to_numpy(dtype=int),
-        day_normalized_anticipation_weights(deployment),
-    )
     if onset_thresholds:
         onset_pipeline = build_pipeline(best_l2, selected_features)
         fit_pipeline(
             onset_pipeline,
-            numeric_feature_frame(deployment, selected_features),
-            onset_interval_labels(deployment),
-            day_equal_weights(deployment),
+            numeric_feature_frame(train, selected_features),
+            onset_interval_labels(train),
+            day_equal_weights(train),
         )
-    later = frame[frame["year"] > test["year"].max()]
-    for year in sorted(later["year"].unique()):
-        subset = later[later["year"] == year]
-        probability = predict_probabilities(
-            deployment_pipeline, subset, selected_features
+    test_probability = predict_probabilities(pipeline, test, selected_features)
+    metrics["test"] = {
+        **classification_metrics(
+            test["label"].to_numpy(dtype=int),
+            test_probability,
+            threshold,
+            anticipation_weights(test),
+        ),
+        **anticipation_metrics(test, test_probability, threshold),
+    }
+    if onset_pipeline is not None:
+        onset_test_probability = predict_onset_horizon_probabilities(
+            onset_pipeline, test, selected_features
         )
-        metrics[f"deployment_later_{int(year)}"] = {
-            **classification_metrics(
-                subset["label"].to_numpy(dtype=int),
-                probability,
-                threshold,
-                anticipation_weights(subset),
-            ),
-            **anticipation_metrics(subset, probability, threshold),
-        }
-        if onset_pipeline is not None:
-            onset_probabilities = predict_onset_horizon_probabilities(
-                onset_pipeline, subset, selected_features
+        for horizon in ONSET_HORIZON_MINUTES:
+            metrics.setdefault(f"onset_horizon_{horizon}m", {})[
+                "test"
+            ] = classification_metrics(
+                onset_horizon_labels(test, horizon),
+                onset_test_probability[horizon],
+                onset_thresholds[str(horizon)],
             )
-            metrics[f"onset_deployment_later_{int(year)}"] = {
-                f"horizon_{horizon}m": classification_metrics(
-                    onset_horizon_labels(subset, horizon),
-                    onset_probabilities[horizon],
-                    onset_thresholds[str(horizon)],
-                )
-                for horizon in ONSET_HORIZON_MINUTES
-            }
-    classifier = deployment_pipeline.named_steps["classifier"]
+    classifier = pipeline.named_steps["classifier"]
     metadata = {
         "schema_version": 2,
         "artifact_format": "joblib",
@@ -782,23 +810,16 @@ def train_and_evaluate(
         },
         "selection": {
             "l2_event_day_3h_average_precision_by_candidate": cv_scores,
-            "selection_data": "expanding_year_folds_within_training_years_only",
-            "deployment_refit": (
-                "same_frozen_architecture_and_validation_threshold_on_all_"
-                "completed_evaluation_years"
-            ),
+            "selection_data": "rolling_expanding_year_oof_within_2017_2025",
+            "threshold_data": "concatenated_rolling_oof_predictions",
         },
         "split": {
             "train_years": sorted(int(value) for value in train["year"].unique()),
-            "validation_years": sorted(int(value) for value in validation["year"].unique()),
             "test_years": sorted(int(value) for value in test["year"].unique()),
             "train_rows": len(train),
-            "validation_rows": len(validation),
             "test_rows": len(test),
-            "deployment_fit_years": sorted(
-                int(value) for value in deployment["year"].unique()
-            ),
-            "deployment_fit_rows": len(deployment),
+            "cross_validation_years": rolling_validation_years(train),
+            "cross_validation_rows": len(cv_frame),
             "prediction_minutes": (
                 sorted(int(value) for value in frame["issue_minutes"].unique())
                 if "issue_minutes" in frame.columns
@@ -819,9 +840,7 @@ def train_and_evaluate(
                 "thresholds": onset_thresholds,
                 "fit_weighting": "equal_total_weight_per_day_uniform_within_day",
                 "prediction_condition": "no_qualifying_wind_onset_observed",
-                "deployment_fit_years": sorted(
-                    int(value) for value in deployment["year"].unique()
-                ),
+                "fit_years": sorted(int(value) for value in train["year"].unique()),
             }
             if onset_pipeline is not None
             else None
@@ -829,7 +848,7 @@ def train_and_evaluate(
     }
     bundle: dict[str, Any] = {
         "metadata": metadata,
-        "pipeline": deployment_pipeline,
+        "pipeline": pipeline,
     }
     if onset_pipeline is not None:
         bundle["onset_pipeline"] = onset_pipeline

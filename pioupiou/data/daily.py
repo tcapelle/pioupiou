@@ -156,6 +156,10 @@ class LabelConfig:
     maximum_weather_feature_age_minutes: float = 90.0
     season_start_month: int = 5
     season_end_month: int = 9
+    # Retained in serialized metadata so an older live runtime can load a new
+    # wind-only model. These fields no longer participate in target_label.
+    hot_day_temperature_threshold_c: float = 25.0
+    hot_day_station_id: str = PRIMARY_WEATHER_STATION.station_id
 
 
 @dataclass(frozen=True)
@@ -210,8 +214,11 @@ def validate_label_config(config: LabelConfig) -> None:
         and config.maximum_feature_age_minutes > 0
         and config.maximum_weather_feature_age_minutes > 0
         and 1 <= config.season_start_month <= config.season_end_month <= 12
+        and config.hot_day_temperature_threshold_c > 0
     ):
         raise ValueError("Label thresholds, coverage, and feature ages must be valid")
+    if not config.hot_day_station_id:
+        raise ValueError("hot_day_station_id must be non-empty")
 
 
 def label_config_from_payload(payload: Any) -> LabelConfig:
@@ -233,7 +240,7 @@ def label_config_from_payload(payload: Any) -> LabelConfig:
         "season_end_month",
     }
     for name, value in payload.items():
-        if name == "timezone_name":
+        if name in {"timezone_name", "hot_day_station_id"}:
             if not isinstance(value, str) or not value:
                 raise ValueError(f"label_config.{name} must be a non-empty string")
         elif name in integer_fields:

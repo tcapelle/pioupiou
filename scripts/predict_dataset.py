@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score a year later than every fitted deployment season."""
+"""Score a held-out year later than every fitted training season."""
 
 from __future__ import annotations
 
@@ -45,9 +45,9 @@ def main() -> int:
     held_out = frame[frame["year"] == args.year].copy()
     if held_out.empty:
         raise SystemExit(f"Dataset contains no labeled rows for {args.year}")
-    deployment_fit_years = set(payload["split"]["deployment_fit_years"])
-    if args.year in deployment_fit_years:
-        raise SystemExit(f"Refusing to score fitted deployment year {args.year}")
+    train_years = set(payload["split"]["train_years"])
+    if args.year in train_years:
+        raise SystemExit(f"Refusing to score fitted training year {args.year}")
 
     feature_names = list(payload["feature_names"])
     required_columns = {

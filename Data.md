@@ -1,14 +1,15 @@
 # Data inventory and splits
 
 This document is a snapshot of the data available in this checkout on
-**2026-08-31**. The generated dataset itself ends on **2026-08-17**; the cached
-Meteo-France hourly archive extends to **2026-08-29**.
+**2026-08-31**. The generated dataset ends on the last complete target day,
+**2026-08-30**; the refreshed wind and Meteo-France hourly archives both extend
+into **2026-08-31**.
 
 The most important distinction is that a file existing for a year does not make
 that year complete. A row reaches the model dataset only after location,
 coverage, season, freshness, and cross-station join checks. The current local
-dataset has **36,785 rows across 1,419 dates**, from 2016-08-09 through
-2026-08-17. It has 110 columns, of which the model consumes 94 features.
+dataset has **37,138 rows across 1,432 dates**, from 2016-08-09 through
+2026-08-30. It has 110 columns, of which the model consumes 94 features.
 
 ## Where the data comes from
 
@@ -32,8 +33,8 @@ flowchart LR
 
 | Data | Upstream | Local copy | What the current pipeline uses | Local coverage |
 | --- | --- | --- | --- | --- |
-| Grand Port wind | [OpenWindMap](https://www.openwindmap.org/) / `https://api.pioupiou.fr/v1/archive/2176` | `pioudata/YYYY-MM.csv` | Minimum, average, and maximum wind speed plus heading. The same observations define the target. | Monthly filenames exist for 2014-2025 and May-August 2026, but lake-location-valid observations only run from 2016-08-08 through 2026-08-17. |
-| Hourly weather | [Meteo-France hourly open data](https://www.data.gouv.fr/datasets/donnees-climatologiques-de-base-horaires) via data.gouv dataset `6569b4473bedf2e7abad3b72` | `pioudata/.weather_cache/meteofrance_*.csv.gz` | CHAMBERY-AIX full weather block; BELLEY, NOVALAISE, and MONT DU CHAT temperature blocks; three temperature contrasts. | All four station caches span 2010-01-01 through 2026-08-29. MONT DU CHAT is missing five observation days in 2017; other gaps can still occur at individual fields/checkpoints. |
+| Grand Port wind | [OpenWindMap](https://www.openwindmap.org/) / `https://api.pioupiou.fr/v1/archive/2176` | `pioudata/YYYY-MM.csv` | Minimum, average, and maximum wind speed plus heading. The same observations define the target. | Monthly filenames exist for 2014-2025 and May-August 2026, but lake-location-valid observations only run from 2016-08-08 through 2026-08-31. |
+| Hourly weather | [Meteo-France hourly open data](https://www.data.gouv.fr/datasets/donnees-climatologiques-de-base-horaires) via data.gouv dataset `6569b4473bedf2e7abad3b72` | `pioudata/.weather_cache/meteofrance_*.csv.gz` | CHAMBERY-AIX full weather block; BELLEY, NOVALAISE, and MONT DU CHAT temperature blocks; three temperature contrasts. | All four station caches span 2010-01-01 through early 2026-08-31. MONT DU CHAT is missing five observation days in 2017; other gaps can still occur at individual fields/checkpoints. |
 | Daily weather | [Meteo-France daily open data](https://www.data.gouv.fr/datasets/donnees-climatologiques-de-base-quotidiennes) via data.gouv dataset `6569b51ae64326786e4e8e1a` | `pioudata/.weather_cache/meteofrance_daily_*.csv.gz` | **Not used by the current dataset builder or model.** These files are leftovers from the earlier daily-maximum-temperature target. | CHAMBERY-AIX cache spans 1973-07-01 through 2026-08-27. |
 | Calendar | Derived locally | In the final CSV | Day-of-year and issue-time sine/cosine features. | Wherever a model-ready row exists. |
 
@@ -73,7 +74,12 @@ The current target is a **wind-rule candidate**, not an independently observed
 Traverse. An in-season day is positive when `[12:00, 20:00)` contains a
 sustained run of at least 30 minutes with average wind at least 18.52 km/h from
 225-315 degrees, with no qualifying-sample gap over 10 minutes. There is
-currently **no temperature condition** in `LabelConfig` or `target_label`.
+currently **no temperature condition** in `target_label`.
+
+Serialized `label_config` metadata still carries the legacy
+`hot_day_temperature_threshold_c` and `hot_day_station_id` keys so older live
+runtimes can load a newly trained bundle. They are compatibility metadata only;
+`target_label` does not read them.
 
 There are up to 27 half-hour checkpoints per date, from 06:30 through 19:30.
 Positive rows at or after the first qualifying onset are intentionally excluded,
@@ -95,47 +101,39 @@ requirements. A normal May-September season contains 153 calendar days.
 | 2020 | Train | 150 | 150 | 3,868 | 22 | Three in-season days have no label-ready wind coverage |
 | 2021 | Train | 148 | 148 | 3,878 | 23 | Five in-season days have no label-ready wind coverage |
 | 2022 | Train | 153 | 153 | 4,023 | 22 | Full season at the day level |
-| 2023 | Validation | 151 | 151 | 3,929 | 21 | Two in-season days have no label-ready wind coverage |
-| 2024 | Test | 153 | 153 | 3,902 | 27 | Full season at the day level |
-| 2025 | Test | 107 | 107 | 2,813 | 17 | Partial season only: May 1 through August 15 |
-| 2026 | Later audit only | 87 | 87 | 2,174 | 11 | Partial season only: May 23 through August 17 |
+| 2023 | Train / rolling OOF | 151 | 151 | 3,929 | 21 | Two in-season days have no label-ready wind coverage |
+| 2024 | Train / rolling OOF | 153 | 153 | 3,902 | 27 | Full season at the day level |
+| 2025 | Train / rolling OOF | 107 | 107 | 2,813 | 17 | Partial season only: May 1 through August 15 |
+| 2026 | Test | 100 | 100 | 2,527 | 11 | Partial season only: May 23 through August 30 |
 
 Consequently, **2017, 2022, and 2024 are the only full 153-day seasons in the
-final table**. “Test 2024-2025” is the configured evaluation slice, but its 2025
-portion is not a complete season in this checkout.
+final table**. The 2026 test is also partial and should not be interpreted as a
+complete-season result.
 
-The raw wind inventory contains 1,211,303 rows. Location filtering rejects
-55,004 rows, timestamp deduplication removes 584 more, and 1,155,715 unique
+The raw wind inventory contains 1,215,257 rows. Location filtering rejects
+55,004 rows, timestamp deduplication removes 586 more, and 1,159,667 unique
 lake-location-valid observations remain. File counts alone overstate usable
 coverage, especially where archived rows have missing or displaced coordinates.
 
-## Current train / validation / test split
+## Current train / test split
 
 ```mermaid
 flowchart LR
     Y16["2016 partial<br/>excluded<br/>1,374 rows"]
-    TR["2017-2022<br/>TRAIN<br/>22,593 rows / 868 days"]
-    VA["2023<br/>VALIDATION<br/>3,929 rows / 151 days"]
-    TE["2024-2025<br/>TEST<br/>6,715 rows / 260 days"]
-    AU["2026 partial<br/>LATER AUDIT<br/>2,174 rows / 87 days"]
+    TR["2017-2025<br/>TRAIN<br/>33,237 rows / 1,279 days"]
+    CV["2020-2025<br/>ROLLING OOF SELECTION<br/>22,413 rows / 862 days"]
+    TE["2026 partial<br/>TEST<br/>2,527 rows / 100 days"]
 
-    Y16 --> TR --> VA --> TE --> AU
-    TR -. "select L2 using expanding-year folds" .-> SEL["Freeze architecture and L2"]
-    VA -. "select decision thresholds" .-> SEL
-    TE -. "report held-out metrics" .-> SEL
-    SEL --> REFIT["Deployment refit on 2017-2025<br/>33,237 rows"]
+    Y16 --> TR --> TE
+    TR -. "each fold trains on earlier years" .-> CV
+    CV -. "select L2 and thresholds" .-> TR
 ```
 
-There are two meanings of “train” in the current artifact:
-
-1. **Evaluation training set:** 2017-2022 only. L2 selection uses expanding-year
-   folds whose validation years are 2020, 2021, and 2022. Decision thresholds
-   are selected on 2023, then metrics are reported on 2024-2025.
-2. **Serialized deployment fit:** after the architecture, regularization, and
-   thresholds are frozen, the saved pipeline is refit on all evaluation years
-   2017-2025: train + validation + test, 33,237 rows. The saved model has seen
-   the nominal test years, but the recorded test metrics come from the earlier
-   train-through-2022 evaluation pipeline. The partial 2026 slice is not fitted.
+The artifact has one fit period and one test period. Expanding-year folds ending
+in 2020 through 2025 generate chronological out-of-fold predictions within the
+training period. Those predictions select L2 and alert thresholds. The saved
+pipeline then fits every 2017-2025 training row. Partial 2026 is evaluated once
+and is never used for fitting or selection.
 
 ## Refresh and verify
 
