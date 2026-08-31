@@ -164,6 +164,13 @@ The public page at <https://tcapelle.github.io/pioupiou/> reads the latest resul
 from `live-data/current_prediction.json`. GitHub Pages is configured to serve
 `main/docs`, while the inference computer updates only the data branch.
 
+`deployment_model.json` pins the live model to an immutable GitHub Release URL
+and SHA-256. Before every API or publisher prediction, the inference process
+checks `artifacts/traverse_model.joblib` and atomically downloads the pinned
+bundle when the local file is missing or stale. Pulling and restarting the
+merged code therefore selects the model declared by that commit rather than an
+untracked artifact left on the inference computer.
+
 ### Run the publisher in a terminal
 
 Open a fresh terminal in this repository and confirm the local prerequisites:

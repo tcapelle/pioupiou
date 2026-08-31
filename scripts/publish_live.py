@@ -13,16 +13,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from pioupiou.inference.deployment import ensure_deployment_model
 from realtime_inference import predict_now
 
 
 SCHEMA_VERSION = 1
 
 
-def prediction_document(model: Path) -> dict[str, Any]:
+def prediction_document(model: Path, model_manifest: Path) -> dict[str, Any]:
     """Return the public document, including a publishable failure state."""
     published_at = datetime.now(timezone.utc).isoformat()
     try:
+        ensure_deployment_model(model, model_manifest)
         prediction = predict_now(model)
     except Exception as error:
         message = str(error)
@@ -134,12 +136,13 @@ def publish(
 
 def run_once(
     model: Path,
+    model_manifest: Path,
     branch: str,
     remote: str,
     dry_run: bool,
     seed_history: Path | None,
 ) -> None:
-    document = prediction_document(model)
+    document = prediction_document(model, model_manifest)
     if dry_run:
         print(json.dumps(document, indent=2, sort_keys=True))
         return
@@ -151,6 +154,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--model", type=Path, default=Path("artifacts/traverse_model.joblib")
+    )
+    parser.add_argument(
+        "--model-manifest",
+        type=Path,
+        default=Path(__file__).parents[1] / "deployment_model.json",
     )
     parser.add_argument("--branch", default="live-data")
     parser.add_argument("--remote", default="origin")
@@ -174,6 +182,7 @@ def main() -> int:
         try:
             run_once(
                 args.model,
+                args.model_manifest,
                 args.branch,
                 args.remote,
                 args.dry_run,
