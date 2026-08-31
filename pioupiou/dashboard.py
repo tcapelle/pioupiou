@@ -21,7 +21,6 @@ from pioupiou.data.daily import (
     monthly_files,
     target_label,
 )
-from pioupiou.data.timestep import build_daily_max_temperatures
 
 
 KMH_PER_KNOT = 1.852
@@ -161,14 +160,6 @@ def build_dashboard_data(
     source_years = [int(path.stem[:4]) for path in monthly_files(input_dir)]
     if not source_years:
         raise ValueError(f"No monthly PiouPiou files found in {input_dir}")
-    daily_max_temperatures = build_daily_max_temperatures(
-        weather_cache_dir,
-        config,
-        min(source_years),
-        max(source_years),
-        refresh=False,
-        offline=True,
-    )
     iterator, counters = iter_unique_piou(input_dir, local_timezone)
     annual: dict[int, dict[str, int]] = defaultdict(
         lambda: {"events": 0, "observed_days": 0}
@@ -185,7 +176,6 @@ def build_dashboard_data(
             local_day,
             observations,
             config,
-            daily_max_temperatures.get(local_day, float("nan")),
         )
         if label is None:
             continue

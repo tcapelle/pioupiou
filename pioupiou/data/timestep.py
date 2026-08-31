@@ -22,14 +22,11 @@ from pioupiou.data.daily import (
     LabelConfig,
     PiouObservation,
     WeatherStation,
-    cache_daily_weather_resource,
     cache_weather_resource,
     calendar_features,
-    discover_daily_weather_resources,
     discover_weather_resources,
     elapsed_minutes,
     group_piou_by_local_day,
-    iter_cached_daily_max_temperature,
     iter_cached_weather,
     iter_unique_piou,
     local_boundary,
@@ -104,7 +101,6 @@ def build_timestep_piou_rows(
     input_dir: Path,
     config: LabelConfig,
     issue_minutes_grid: tuple[int, ...],
-    daily_max_temperatures: Mapping[date, float],
 ) -> list[dict[str, Any]]:
     timezone_local = ZoneInfo(config.timezone_name)
     iterator, _ = iter_unique_piou(input_dir, timezone_local)
@@ -114,7 +110,6 @@ def build_timestep_piou_rows(
             local_day,
             observations,
             config,
-            daily_max_temperatures.get(local_day, float("nan")),
         )
         if daily_target is None:
             continue
@@ -317,48 +312,6 @@ def build_weather_timeline(
     return combined
 
 
-def build_daily_max_temperatures(
-    cache_dir: Path,
-    config: LabelConfig,
-    start_year: int,
-    end_year: int,
-    refresh: bool,
-    offline: bool,
-) -> dict[date, float]:
-    station = next(
-        (
-            item
-            for item in WEATHER_STATIONS
-            if item.station_id == config.hot_day_station_id
-        ),
-        None,
-    )
-    if station is None:
-        raise ValueError(
-            f"Unknown hot-day station {config.hot_day_station_id!r}"
-        )
-    resources = discover_daily_weather_resources(
-        cache_dir,
-        start_year,
-        end_year,
-        offline,
-        departments=(station.department,),
-    )
-    paths = [
-        cache_daily_weather_resource(
-            cache_dir, resource, station, refresh, offline
-        )
-        for resource in resources
-    ]
-    return {
-        local_day: temperature
-        for local_day, temperature in iter_cached_daily_max_temperature(
-            paths, station
-        )
-        if start_year <= local_day.year <= end_year
-    }
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-dir", type=Path, default=Path("pioudata"))
@@ -382,19 +335,10 @@ def main() -> int:
     source_years = [int(path.stem[:4]) for path in source_files]
     start_year = min(source_years)
     end_year = max(source_years)
-    daily_max_temperatures = build_daily_max_temperatures(
-        args.cache_dir,
-        config,
-        start_year,
-        end_year,
-        args.refresh_weather,
-        args.offline,
-    )
     piou_rows = build_timestep_piou_rows(
         args.input_dir,
         config,
         PREDICTION_MINUTES,
-        daily_max_temperatures,
     )
     if not piou_rows:
         raise SystemExit("No usable PiouPiou timestep rows were produced")
