@@ -12,8 +12,8 @@ class PublishLiveTests(unittest.TestCase):
         with patch(
             "scripts.publish_live.predict_now",
             return_value={"status": "pre_onset", "traverse_probability": 0.42},
-        ):
-            result = prediction_document(Path("model.joblib"))
+        ), patch("scripts.publish_live.ensure_deployment_model"):
+            result = prediction_document(Path("model.joblib"), Path("manifest.json"))
         self.assertEqual(result["schema_version"], 1)
         self.assertEqual(result["status"], "pre_onset")
         self.assertEqual(result["traverse_probability"], 0.42)
@@ -23,8 +23,8 @@ class PublishLiveTests(unittest.TestCase):
         with patch(
             "scripts.publish_live.predict_now",
             side_effect=ValueError("observations are stale"),
-        ):
-            result = prediction_document(Path("model.joblib"))
+        ), patch("scripts.publish_live.ensure_deployment_model"):
+            result = prediction_document(Path("model.joblib"), Path("manifest.json"))
         self.assertEqual(result["status"], "unavailable")
         self.assertEqual(result["message"], "observations are stale")
 
@@ -34,8 +34,8 @@ class PublishLiveTests(unittest.TestCase):
             side_effect=ValueError(
                 "Current time is outside the model's 06:30-19:59 window"
             ),
-        ):
-            result = prediction_document(Path("model.joblib"))
+        ), patch("scripts.publish_live.ensure_deployment_model"):
+            result = prediction_document(Path("model.joblib"), Path("manifest.json"))
         self.assertEqual(result["status"], "outside_prediction_window")
 
     def test_update_history_preserves_daily_points_and_rebuilds_index(self):

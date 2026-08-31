@@ -60,7 +60,8 @@ exceed a longer-horizon estimate.
   API returns `status: onset_observed` and zero future-onset probabilities; live
   observations are then event monitoring. Because the run requires 30 minutes
   to confirm, its recorded start necessarily precedes the status change. The
-  target also requires the eventual CHAMBERY-AIX daily maximum to exceed 25°C.
+  target has no retrospective temperature gate; temperature is an
+  inference-time predictor only.
 
 These boundaries are part of the trained model contract. A live implementation
 must not substitute receipt time for observation time or include observations
@@ -321,9 +322,8 @@ least:
 - prediction calibration once outcomes are available.
 
 If a material shift appears, define a chronological retraining/evaluation
-period in advance. Do not tune transformations or thresholds against the
-existing held-out 2024–2025 results, and do not rewrite those reported results
-without a reproducible run.
+period in advance. Do not tune transformations or thresholds against the 2026
+test, and do not rewrite reported results without a reproducible run.
 
 ## Remaining work
 

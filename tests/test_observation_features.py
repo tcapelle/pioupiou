@@ -52,9 +52,8 @@ class ObservationFeatureTests(unittest.TestCase):
     def test_target_requires_duration_and_consecutive_run(self):
         start = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)
         values = [observation(start + timedelta(minutes=4 * index)) for index in range(8)]
-        result = target_label(self.day, values, self.config, 30.0)
+        result = target_label(self.day, values, self.config)
         self.assertEqual(result["label"], 1)
-        self.assertEqual(result["meta_target_hot_day"], 1)
         self.assertEqual(result["meta_target_wind_event"], 1)
         self.assertGreaterEqual(result["meta_target_qualifying_minutes"], 30.0)
         self.assertEqual(result["meta_target_longest_qualifying_run"], 8)
@@ -79,7 +78,6 @@ class ObservationFeatureTests(unittest.TestCase):
             self.day,
             [*first_run, interruption, *second_run],
             self.config,
-            30.0,
         )
         self.assertGreaterEqual(result["meta_target_qualifying_minutes"], 30.0)
         self.assertLess(
@@ -87,12 +85,21 @@ class ObservationFeatureTests(unittest.TestCase):
         )
         self.assertEqual(result["label"], 0)
 
-    def test_target_requires_hot_day_inside_may_through_september(self):
+    def test_target_only_applies_inside_may_through_september(self):
         start = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)
         values = [observation(start + timedelta(minutes=4 * index)) for index in range(8)]
-        self.assertEqual(target_label(self.day, values, self.config, 25.0)["label"], 0)
+        self.assertEqual(target_label(self.day, values, self.config)["label"], 1)
         winter = date(2024, 12, 1)
-        self.assertIsNone(target_label(winter, values, self.config, 30.0))
+        self.assertIsNone(target_label(winter, values, self.config))
+
+    def test_legacy_hot_day_config_does_not_gate_the_wind_target(self):
+        start = datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL)
+        values = [observation(start + timedelta(minutes=4 * index)) for index in range(8)]
+        config = LabelConfig(
+            minimum_target_coverage=0.0,
+            hot_day_temperature_threshold_c=100.0,
+        )
+        self.assertEqual(target_label(self.day, values, config)["label"], 1)
 
     def test_piou_features_exclude_the_cutoff(self):
         before = datetime(2024, 7, 1, 11, 56, tzinfo=LOCAL)

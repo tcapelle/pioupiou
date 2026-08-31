@@ -3,7 +3,7 @@
 This repository contains one research model bundle. Its primary output is an
 advance warning that a qualifying Traverse will begin later in today's fixed
 `[12:00, 20:00)` local
-window on a hot day from May through September, given observations available
+window from May through September, given observations available
 at the requested time. Dates outside May–September are outside the model
 population.
 
@@ -26,17 +26,14 @@ features are limited to:
 - temperature summaries from BELLEY, NOVALAISE, and MONT DU CHAT; and
 - explicit lowland, lake-side, and ridge temperature contrasts.
 
-All observations at or after the requested time are excluded. Model selection
-and reporting use the chronological split 2017–2022 training, 2023 validation,
-and 2024–2025 test.
-L2 regularization is selected by event-day average precision at least three
-hours before onset. The threshold balances three-hour event alerts against
-false-alert days on validation data. The selected model uses `L2=10` and
-threshold `0.27567`. Fit weights preserve the lead-time value within each
+All observations at or after the requested time are excluded. The model trains
+on 2017–2025 and tests once on partial 2026. Within the training period,
+expanding-year folds for 2020–2025 produce out-of-fold predictions used to
+select L2 regularization and the alert threshold. The selected model uses
+`L2=10` and threshold `0.30509`. Fit weights preserve the lead-time value within each
 day, then normalize every day to equal total weight so days with more available
-checkpoints do not dominate training. After those choices and the test metrics
-are frozen, the serialized deployment pipeline is refit on every completed
-evaluation year, 2017–2025, without changing its architecture or threshold.
+checkpoints do not dominate training. The serialized pipeline is fitted once on
+all 2017–2025 rows; 2026 is never used for fitting or selection.
 
 The bundle also contains one ordered onset companion. It classifies each
 pre-onset row into onset within 1 hour, 1–2 hours, 2–3 hours, or later/no onset,
@@ -46,20 +43,13 @@ independently fitted binary models. It uses the same 94 inference-time features
 and uniform within-day, equal-per-day fit weights.
 The estimates have not received a separate probability-calibration fit.
 
-On the chronological 2024–2025 test years, three-hour event-day AP is `0.190`, ROC
-AUC is `0.717`, and false-alert days are `14.8%`; `34.8%` of events are alerted
-at least three hours early. On the later partial 2026 season, the deployment
-refit reaches AP `0.267`, AUC `0.658`, and `50.0%` (5/10) three-hour event
-coverage with `15.6%` false-alert days. The otherwise identical model trained
-only through 2022 reaches AP `0.226`, alerts 3/10 events, and has the same
-false-alert rate. See the
-[deployment-refit experiment](experiments/20260825-deployment-refit/plan.md)
-and [ordered-onset audit](experiments/20260829-ordered-onset-deployment/plan.md),
-as well as the earlier [frozen-model record](experiments/20260818-hot-season-anticipation/plan.md),
-for the complete interpretation, plus the earlier
-[target](experiments/20260818-hot-season-multistation/plan.md) and
-[anticipation](experiments/20260817-lead-time-anticipation/plan.md) records for
-the experiment history.
+Across the rolling historical folds, three-hour event-day AP is `0.233`, ROC AUC
+is `0.624`, event coverage is `50.0%`, and false-alert days are `27.3%`. On the
+partial 2026 test through August 30, AP is `0.175`, AUC is `0.560`, `27.3%`
+(3/11) of events are alerted at least three hours early, and `20.2%` (18/89) of
+negative days receive an alert. See the
+[simplified split experiment](experiments/20260831-train-through-2025-test-2026/plan.md)
+and the earlier experiment records for the research history.
 
 ## Data sources
 
@@ -77,7 +67,7 @@ exists in the upstream archive.
 | Station and source | Wind | Temperature | Moisture | Pressure | Rain | Cloud and visibility | Sun and radiation |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **Grand Port, Aix-les-Bains** (`2176`)<br>[OpenWindMap](https://www.openwindmap.org/) PiouPiou/Windbird | Minimum, average, maximum/gust (`km/h`); direction (`°`); morning mean, trend, westerly component, and freshness | — | — | — | — | — | — |
-| **CHAMBERY-AIX airport** (`73329001`)<br>Météo-France · [public station view](https://www.meteociel.fr/temps-reel/obs_villes.php?code2=73329001) | 10 m speed (`m/s`); direction (`°`); latest, morning mean/change, and mean westerly component | Air temperature and dew point (`°C`): latest, morning mean/change; dew-point depression; official daily maximum | Relative humidity (`%`): latest and morning mean/change | Mean-sea-level and surface pressure (`hPa`): latest and morning mean/change | Hourly precipitation accumulated since 06:00 (`mm`) | Visibility (`m`): latest and morning mean/change; mean cloud cover (`oktas`) and sky-obscured fraction | Sunshine duration (`min`); global, direct, and diffuse radiation totals (`J/cm²`) and means (`W/m²`) |
+| **CHAMBERY-AIX airport** (`73329001`)<br>Météo-France · [public station view](https://www.meteociel.fr/temps-reel/obs_villes.php?code2=73329001) | 10 m speed (`m/s`); direction (`°`); latest, morning mean/change, and mean westerly component | Air temperature and dew point (`°C`): latest, morning mean/change; dew-point depression | Relative humidity (`%`): latest and morning mean/change | Mean-sea-level and surface pressure (`hPa`): latest and morning mean/change | Hourly precipitation accumulated since 06:00 (`mm`) | Visibility (`m`): latest and morning mean/change; mean cloud cover (`oktas`) and sky-obscured fraction | Sunshine duration (`min`); global, direct, and diffuse radiation totals (`J/cm²`) and means (`W/m²`) |
 | **BELLEY** (`01034004`)<br>Météo-France | — | Air temperature (`°C`): latest, morning mean, and morning change | — | — | — | — | — |
 | **NOVALAISE** (`73191001`)<br>Météo-France | — | Air temperature (`°C`): latest, morning mean, and morning change | — | — | — | — | — |
 | **MONT DU CHAT** (`73051001`, ridge)<br>Météo-France | — | Air temperature (`°C`): latest, morning mean, and morning change | — | — | — | — | — |
@@ -90,12 +80,12 @@ same airport station often identified by the WMO code `07491`; it is not an
 additional sixth source.
 
 For retrospective builds, the repository keeps monthly OpenWindMap CSVs and
-downloads the required Météo-France hourly and daily open-data archives by
+downloads the required Météo-France hourly open-data archives by
 department. Live inference reads the same four Météo-France sites from the
 public observation API. At every issue time, only observations strictly before
 that time are exposed to the model. Weather summaries start at 06:00 local time
 and their latest core reading must be no more than 90 minutes old; Grand Port
-wind summaries start at 08:00 and must be no more than 30 minutes old.
+wind summaries start at 06:00 and must be no more than 30 minutes old.
 
 Wind data attribution: © contributors of the
 [OpenWindMap wind network](https://www.openwindmap.org/). Map shoreline:
@@ -173,6 +163,13 @@ the local archives on first load and then cached in memory.
 The public page at <https://tcapelle.github.io/pioupiou/> reads the latest result
 from `live-data/current_prediction.json`. GitHub Pages is configured to serve
 `main/docs`, while the inference computer updates only the data branch.
+
+`deployment_model.json` pins the live model to an immutable GitHub Release URL
+and SHA-256. Before every API or publisher prediction, the inference process
+checks `artifacts/traverse_model.joblib` and atomically downloads the pinned
+bundle when the local file is missing or stale. Pulling and restarting the
+merged code therefore selects the model declared by that commit rather than an
+untracked artifact left on the inference computer.
 
 ### Run the publisher in a terminal
 
@@ -260,7 +257,7 @@ large ranges):
 ```bash
 uv run --frozen python -m scripts.fetch_piou_archive --station-id 2176 --year 2026
 
-# Rebuild the feature table; the chronological split still trains on 2017–2022.
+# Rebuild the feature table; training uses 2017–2025 and testing uses 2026.
 uv run --frozen python -m scripts.build_timestep_dataset
 uv run --frozen python -m scripts.train \
   --wandb-name 2026-holdout-dashboard \
@@ -280,13 +277,12 @@ from the lake station are rejected. Météo-France observations must match the
 configured CHAMBERY-AIX station location and use accepted quality codes 0, 1,
 or 9.
 
-A day is in scope only from May 1 through September 30. It is positive when the
-official CHAMBERY-AIX daily maximum temperature is strictly greater than 25°C
-and observations in `[12:00, 20:00)` show wind of at least 18.52 km/h from
+A day is in scope only from May 1 through September 30. It is positive when
+observations in `[12:00, 20:00)` show wind of at least 18.52 km/h from
 225°–315° for one sustained run of at least 30 minutes, with qualifying-sample
-gaps no larger than 10 minutes. Cooler in-season days are negative. Dates
-outside the season and days below 75% target-window coverage have an unknown
-label and are excluded from training.
+gaps no larger than 10 minutes. Temperature remains a predictor but is not part
+of the target. Dates outside the season and days below 75% target-window
+coverage have an unknown label and are excluded from training.
 
 This is a leakage-free retrospective prototype, not a production warning
 service. Do not tune feature choices or thresholds on the held-out years.

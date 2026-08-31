@@ -15,7 +15,9 @@ class ApiTests(unittest.TestCase):
             ],
         )
         expected = {"prediction_time": "2026-08-17T18:08:00+02:00"}
-        with patch("api.predict_now", return_value=expected):
+        with patch("api.predict_now", return_value=expected), patch(
+            "api.ensure_deployment_model"
+        ):
             self.assertEqual(predict(), expected)
 
     def test_dashboard_page_and_data(self):

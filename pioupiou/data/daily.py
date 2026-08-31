@@ -156,6 +156,8 @@ class LabelConfig:
     maximum_weather_feature_age_minutes: float = 90.0
     season_start_month: int = 5
     season_end_month: int = 9
+    # Retained in serialized metadata so an older live runtime can load a new
+    # wind-only model. These fields no longer participate in target_label.
     hot_day_temperature_threshold_c: float = 25.0
     hot_day_station_id: str = PRIMARY_WEATHER_STATION.station_id
 
@@ -567,11 +569,8 @@ def target_label(
     local_day: date,
     observations: Sequence[PiouObservation],
     config: LabelConfig,
-    daily_max_temperature_c: float,
 ) -> dict[str, float | int] | None:
-    if not is_traverse_season(local_day, config) or not np.isfinite(
-        daily_max_temperature_c
-    ):
+    if not is_traverse_season(local_day, config):
         return None
     timezone_local = ZoneInfo(config.timezone_name)
     start = local_boundary(local_day, config.cutoff_hour, timezone_local)
@@ -596,11 +595,8 @@ def target_label(
 
     wind = qualifying_wind_summary(target, end, config)
     wind_event = wind["event_onset"] is not None
-    hot_day = daily_max_temperature_c > config.hot_day_temperature_threshold_c
     return {
-        "label": int(hot_day and wind_event),
-        "meta_target_hot_day": int(hot_day),
-        "meta_target_daily_max_temperature_c": float(daily_max_temperature_c),
+        "label": int(wind_event),
         "meta_target_wind_event": int(wind_event),
         "meta_target_observations": len(target),
         "meta_target_coverage_fraction": coverage_fraction,
