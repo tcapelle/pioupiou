@@ -61,6 +61,46 @@ for the complete interpretation, plus the earlier
 [anticipation](experiments/20260817-lead-time-anticipation/plan.md) records for
 the experiment history.
 
+## Data sources
+
+The model observes the lake directly and samples the air mass around it,
+especially to the west where a Traverse arrives from. The map shows every
+station currently used by the feature pipeline; it is not a map of candidate
+stations.
+
+<img src="docs/data-sources-map.svg" alt="Map of the five observation stations used around Lac du Bourget" width="760">
+
+The table inventories the quantities retained by the current feature pipeline.
+An em dash means that the quantity is not used from that station, even if it
+exists in the upstream archive.
+
+| Station and source | Wind | Temperature | Moisture | Pressure | Rain | Cloud and visibility | Sun and radiation |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **Grand Port, Aix-les-Bains** (`2176`)<br>[OpenWindMap](https://www.openwindmap.org/) PiouPiou/Windbird | Minimum, average, maximum/gust (`km/h`); direction (`°`); morning mean, trend, westerly component, and freshness | — | — | — | — | — | — |
+| **CHAMBERY-AIX airport** (`73329001`)<br>Météo-France · [public station view](https://www.meteociel.fr/temps-reel/obs_villes.php?code2=73329001) | 10 m speed (`m/s`); direction (`°`); latest, morning mean/change, and mean westerly component | Air temperature and dew point (`°C`): latest, morning mean/change; dew-point depression; official daily maximum | Relative humidity (`%`): latest and morning mean/change | Mean-sea-level and surface pressure (`hPa`): latest and morning mean/change | Hourly precipitation accumulated since 06:00 (`mm`) | Visibility (`m`): latest and morning mean/change; mean cloud cover (`oktas`) and sky-obscured fraction | Sunshine duration (`min`); global, direct, and diffuse radiation totals (`J/cm²`) and means (`W/m²`) |
+| **BELLEY** (`01034004`)<br>Météo-France | — | Air temperature (`°C`): latest, morning mean, and morning change | — | — | — | — | — |
+| **NOVALAISE** (`73191001`)<br>Météo-France | — | Air temperature (`°C`): latest, morning mean, and morning change | — | — | — | — | — |
+| **MONT DU CHAT** (`73051001`, ridge)<br>Météo-France | — | Air temperature (`°C`): latest, morning mean, and morning change | — | — | — | — | — |
+
+The three auxiliary stations are deliberately temperature-only. Their readings
+form Belley-minus-airport, Novalaise-minus-airport, and
+Belley-minus-Mont-du-Chat contrasts, representing the lowland, lake-side, and
+ridge temperature structure west of the lake. CHAMBERY-AIX is therefore the
+same airport station often identified by the WMO code `07491`; it is not an
+additional sixth source.
+
+For retrospective builds, the repository keeps monthly OpenWindMap CSVs and
+downloads the required Météo-France hourly and daily open-data archives by
+department. Live inference reads the same four Météo-France sites from the
+public observation API. At every issue time, only observations strictly before
+that time are exposed to the model. Weather summaries start at 06:00 local time
+and their latest core reading must be no more than 90 minutes old; Grand Port
+wind summaries start at 08:00 and must be no more than 30 minutes old.
+
+Wind data attribution: © contributors of the
+[OpenWindMap wind network](https://www.openwindmap.org/). Map shoreline:
+© [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), ODbL.
+
 ## Build, train, and test
 
 Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
