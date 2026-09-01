@@ -101,12 +101,17 @@ uv run --frozen python -m scripts.build_timestep_dataset --offline
 uv run --frozen python -m scripts.train \
   --wandb-name same-day-traverse \
   --wandb-mode disabled
+uv run --frozen python eval_model.py
 uv run --frozen python -m unittest discover -v
 ```
 
 Remove `--offline` on the first dataset build to fetch and filter the required
 Météo-France archive. Generated datasets, weather caches, model artifacts, and
 W&B runs are ignored by Git.
+
+`eval_model.py` writes `artifacts/eval_2026.json`. It reports row-level metrics,
+event-day detections and misses, false-alert and correctly quiet days, ordered
+onset-horizon metrics, and one score record for each 2026 Traverse event.
 
 ## Predict
 
