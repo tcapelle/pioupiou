@@ -1,0 +1,16 @@
+{
+  "current_wind": {
+    "age_minutes": 5.483333333333333,
+    "average_kmh": 10.5,
+    "direction_degrees": 112.5,
+    "gust_kmh": 13.5,
+    "minimum_kmh": 6.25,
+    "observation_time": "2026-09-19T21:07:31+02:00"
+  },
+  "model_kind": "remaining_wind",
+  "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+  "prediction_time": "2026-09-19T21:13:00+02:00",
+  "published_at": "2026-09-19T19:13:53.107090+00:00",
+  "schema_version": 1,
+  "status": "outside_prediction_window"
+}
