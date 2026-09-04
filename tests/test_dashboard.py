@@ -11,6 +11,14 @@ from pioupiou.dashboard import (
 
 
 class DashboardTests(unittest.TestCase):
+    def test_public_page_has_accessible_model_results_tab(self):
+        page = Path("docs/index.html").read_text()
+        self.assertIn('id="tab-results"', page)
+        self.assertIn('aria-controls="panel-results"', page)
+        self.assertIn('role="tabpanel" aria-labelledby="tab-results"', page)
+        for outcome in ("detected", "missed", "false-positive", "true-negative"):
+            self.assertIn(f'id="results-{outcome}"', page)
+
     def test_kmh_to_knots_uses_exact_conversion(self):
         self.assertAlmostEqual(kmh_to_knots(18.52), 10.0)
 
