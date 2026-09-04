@@ -33,14 +33,22 @@
     .tab[aria-selected="true"] { background:var(--card); color:var(--blue-deep); box-shadow:0 5px 16px rgb(30 55 59 / 10%); }
     .tab:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
     .tab-panel[hidden] { display:none; }
-    .audit { margin-bottom:18px; padding:22px 26px; }
-    .audit-head { display:flex; justify-content:space-between; gap:20px; align-items:baseline; margin-bottom:18px; }
-    .audit-head p { margin:0; color:var(--muted); font-size:12px; }
-    .audit-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:0; }
-    .audit-stat { padding:2px 22px; border-left:1px solid var(--line); color:var(--muted); font-size:12px; }
-    .audit-stat:first-child { padding-left:0; border-left:0; }
-    .audit-stat b { display:block; margin-bottom:3px; color:var(--ink); font:500 30px/1 Georgia,serif; letter-spacing:-.035em; }
-    .audit-stat small { display:block; margin-top:3px; color:var(--blue-deep); font-size:11px; }
+    .results { padding:clamp(24px,4vw,38px); }
+    .results-head { display:flex; justify-content:space-between; gap:20px; align-items:baseline; margin-bottom:24px; }
+    .results-head h2 { margin:3px 0 0; font:500 32px/1.1 Georgia,serif; letter-spacing:-.03em; }
+    .results-head p { margin:0; color:var(--muted); font-size:12px; }
+    .outcome-grid { display:grid; grid-template-columns:repeat(4,1fr); overflow:hidden; border:1px solid var(--line); border-radius:18px; }
+    .outcome { min-height:150px; padding:22px; border-left:1px solid var(--line); }
+    .outcome:first-child { border-left:0; }
+    .outcome-tag { display:inline-block; padding:4px 7px; border-radius:7px; background:rgb(47 125 79 / 11%); color:var(--green); font-size:10px; font-weight:800; letter-spacing:.08em; }
+    .outcome.missed .outcome-tag,.outcome.false-alert .outcome-tag { background:rgb(225 103 77 / 12%); color:#a33e2c; }
+    .outcome b { display:block; margin:14px 0 5px; font:500 38px/1 Georgia,serif; letter-spacing:-.04em; }
+    .outcome span { display:block; color:var(--ink); font-size:13px; font-weight:700; }
+    .outcome small { display:block; margin-top:4px; color:var(--muted); font-size:11px; }
+    .result-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-top:20px; padding:22px 4px 0; border-top:1px solid var(--line); }
+    .result-metrics span { color:var(--muted); font-size:12px; }
+    .result-metrics b { display:block; margin-bottom:2px; color:var(--ink); font-size:21px; font-weight:650; }
+    .results-note { margin:22px 2px 0; color:var(--muted); font-size:12px; }
     .cards { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(280px,.8fr); gap:18px; align-items:stretch; }
     .card { position:relative; overflow:hidden; background:var(--card); border:1px solid rgb(255 255 255 / 70%); border-radius:26px; padding:clamp(24px,4vw,38px); box-shadow:0 18px 50px rgb(30 55 59 / 10%),inset 0 0 0 1px rgb(16 45 66 / 5%); backdrop-filter:blur(15px); }
     .card::before { content:""; position:absolute; inset:0 0 auto; height:3px; background:linear-gradient(90deg,var(--blue),var(--glow)); opacity:.85; }
@@ -109,9 +117,10 @@
       .live-dot { width:7px; height:7px; box-shadow:0 0 0 4px rgb(57 166 109 / 12%); }
       .tabs { display:flex; width:100%; margin:0 0 16px; padding:3px; }
       .tab { flex:1; min-height:42px; padding:0 10px; }
-      .audit-head { align-items:start; flex-direction:column; }
-      .audit-grid { grid-template-columns:1fr 1fr; gap:18px 0; }
-      .audit-stat:nth-child(3) { padding-left:0; border-left:0; }
+      .results-head { align-items:start; flex-direction:column; }
+      .outcome-grid { grid-template-columns:1fr 1fr; }
+      .outcome:nth-child(3) { border-left:0; border-top:1px solid var(--line); }
+      .outcome:nth-child(4) { border-top:1px solid var(--line); }
       .cards { grid-template-columns:1fr; }
       .archive-head { flex-direction:column; }
       .footer { flex-direction:column; }
@@ -120,9 +129,10 @@
       .card { padding:22px; border-radius:22px; }
       .topline { gap:10px; }
       .status { padding:5px 9px; font-size:11px; white-space:nowrap; }
-      .audit-grid { grid-template-columns:1fr; }
-      .audit-stat { padding:14px 0; border-left:0; border-top:1px solid var(--line); }
-      .audit-stat:first-child { padding-top:0; border-top:0; }
+      .outcome-grid { grid-template-columns:1fr; }
+      .outcome { min-height:0; border-left:0; border-top:1px solid var(--line); }
+      .outcome:first-child { border-top:0; }
+      .result-metrics { grid-template-columns:1fr 1fr; }
       .metrics { grid-template-columns:1fr 1fr; gap:18px 12px; }
       .metrics span:last-child { grid-column:1 / -1; }
       .archive-summary { grid-template-columns:1fr; }
@@ -143,7 +153,8 @@
     </header>
     <nav class="tabs" role="tablist" aria-label="Forecast views">
       <button id="tab-live" class="tab" role="tab" aria-selected="true" aria-controls="panel-live" data-tab="live">Live</button>
-      <button id="tab-explore" class="tab" role="tab" aria-selected="false" aria-controls="panel-explore" data-tab="explore">Audit &amp; explore</button>
+      <button id="tab-results" class="tab" role="tab" aria-selected="false" aria-controls="panel-results" data-tab="results">Model results</button>
+      <button id="tab-explore" class="tab" role="tab" aria-selected="false" aria-controls="panel-explore" data-tab="explore">Explore</button>
     </nav>
     <section id="panel-live" class="tab-panel" role="tabpanel" aria-labelledby="tab-live">
       <div class="cards" aria-live="polite">
@@ -180,16 +191,28 @@
         </section>
       </div>
     </section>
-    <section id="panel-explore" class="tab-panel" role="tabpanel" aria-labelledby="tab-explore" hidden>
-      <section id="audit" class="card audit" hidden>
-        <div class="audit-head"><div class="eyebrow">2026 model audit</div><p id="audit-through"></p></div>
-        <div class="audit-grid">
-          <div class="audit-stat"><b id="audit-events">–</b>Traverse event days<small id="audit-event-detail"></small></div>
-          <div class="audit-stat"><b id="audit-false-alerts">–</b>false-alert days<small id="audit-negative-detail"></small></div>
-          <div class="audit-stat"><b id="audit-ap">–</b>average precision<small>event-day ranking at ≥3 h lead</small></div>
-          <div class="audit-stat"><b id="audit-warning">–</b>median warning<small>among alerted event days</small></div>
+    <section id="panel-results" class="tab-panel" role="tabpanel" aria-labelledby="tab-results" hidden>
+      <section id="model-results" class="card results" hidden>
+        <div class="results-head">
+          <div><div class="eyebrow">2026 retrospective audit</div><h2>Current model results</h2></div>
+          <p id="results-through"></p>
         </div>
+        <div class="outcome-grid">
+          <div class="outcome"><span class="outcome-tag">TP</span><b id="results-detected">–</b><span>detected events</span><small id="results-detected-detail">at least 3 hours ahead</small></div>
+          <div class="outcome missed"><span class="outcome-tag">FN</span><b id="results-missed">–</b><span>missed events</span><small id="results-missed-detail">no alert at least 3 hours ahead</small></div>
+          <div class="outcome false-alert"><span class="outcome-tag">FP</span><b id="results-false-positive">–</b><span>false-alert days</span><small id="results-false-positive-detail">among non-event days</small></div>
+          <div class="outcome"><span class="outcome-tag">TN</span><b id="results-true-negative">–</b><span>correctly quiet days</span><small id="results-true-negative-detail">among non-event days</small></div>
+        </div>
+        <div class="result-metrics">
+          <span><b id="results-ap">–</b>average precision · ≥3 h</span>
+          <span><b id="results-auc">–</b>ROC AUC · ≥3 h</span>
+          <span><b id="results-balanced-accuracy">–</b>balanced accuracy</span>
+          <span><b id="results-warning">–</b>median warning</span>
+        </div>
+        <p class="results-note">Event-day metrics use the frozen alert threshold selected before this scoring pass. This is a retrospective audit on partial 2026 data, not an untouched prospective evaluation or a live accuracy estimate.</p>
       </section>
+    </section>
+    <section id="panel-explore" class="tab-panel" role="tabpanel" aria-labelledby="tab-explore" hidden>
       <section id="archive" class="card archive" hidden>
         <div class="archive-head">
           <div><div class="eyebrow">2026 archive</div><h2 class="archive-title">Browse previous days</h2></div>
@@ -226,10 +249,11 @@
         button.setAttribute("aria-selected", String(selected));
         button.tabIndex = selected ? 0 : -1;
       });
-      byId("panel-live").hidden = name !== "live";
-      byId("panel-explore").hidden = name !== "explore";
+      document.querySelectorAll("[role=tabpanel]").forEach(panel => {
+        panel.hidden = panel.id !== `panel-${name}`;
+      });
       if (updateUrl) {
-        const url = name === "explore" ? "#explore" : `${location.pathname}${location.search}`;
+        const url = name === "live" ? `${location.pathname}${location.search}` : `#${name}`;
         history.pushState({ tab:name }, "", url);
       }
     };
@@ -244,8 +268,9 @@
         activateTab(next.dataset.tab, true);
       });
     });
-    addEventListener("popstate", () => activateTab(location.hash === "#explore" ? "explore" : "live"));
-    activateTab(location.hash === "#explore" ? "explore" : "live");
+    const tabFromHash = () => ["results","explore"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "live";
+    addEventListener("popstate", () => activateTab(tabFromHash()));
+    activateTab(tabFromHash());
     const percent = value => `${Math.round(100 * Number(value))}%`;
     const knots = value => Number(value) / 1.852;
     const compass = degrees => ["N","NE","E","SE","S","SW","W","NW"][Math.round(Number(degrees) / 45) % 8];
@@ -262,14 +287,23 @@
     fetch(`${DATA_BASE}/metrics.json?t=${Date.now()}`, { cache:"no-store" })
       .then(response => { if (!response.ok) throw new Error("Audit metrics unavailable"); return response.json(); })
       .then(metrics => {
-        byId("audit").hidden = false;
-        byId("audit-through").textContent = `Retrospective audit through ${displayDate(metrics.through)}`;
-        byId("audit-events").textContent = `${metrics.events_alerted_at_least_3h}/${metrics.event_days}`;
-        byId("audit-event-detail").textContent = "alerted at least 3 hours early";
-        byId("audit-false-alerts").textContent = `${metrics.false_alert_days}/${metrics.negative_days}`;
-        byId("audit-negative-detail").textContent = `${Math.round(100 * metrics.false_alert_days / metrics.negative_days)}% of non-event days`;
-        byId("audit-ap").textContent = Number(metrics.event_day_3h_average_precision).toFixed(3);
-        byId("audit-warning").textContent = `${(Number(metrics.median_warning_minutes) / 60).toFixed(1)} h`;
+        const trueNegativeDays = metrics.true_negative_days ?? metrics.negative_days - metrics.false_alert_days;
+        const truePositiveRate = metrics.events_alerted_at_least_3h / metrics.event_days;
+        const trueNegativeRate = trueNegativeDays / metrics.negative_days;
+        byId("model-results").hidden = false;
+        byId("results-through").textContent = `Through ${displayDate(metrics.through)}`;
+        byId("results-detected").textContent = `${metrics.events_alerted_at_least_3h}/${metrics.event_days}`;
+        byId("results-missed").textContent = `${metrics.events_missed_at_least_3h}/${metrics.event_days}`;
+        byId("results-false-positive").textContent = `${metrics.false_alert_days}/${metrics.negative_days}`;
+        byId("results-true-negative").textContent = `${trueNegativeDays}/${metrics.negative_days}`;
+        byId("results-detected-detail").textContent = `${Math.round(100 * truePositiveRate)}% detected at least 3 hours ahead`;
+        byId("results-missed-detail").textContent = `${Math.round(100 * (1 - truePositiveRate))}% missed at that lead`;
+        byId("results-false-positive-detail").textContent = `${Math.round(100 * (1 - trueNegativeRate))}% of non-event days`;
+        byId("results-true-negative-detail").textContent = `${Math.round(100 * trueNegativeRate)}% of non-event days`;
+        byId("results-ap").textContent = Number(metrics.event_day_3h_average_precision).toFixed(3);
+        byId("results-auc").textContent = Number(metrics.event_day_3h_roc_auc).toFixed(3);
+        byId("results-balanced-accuracy").textContent = (metrics.event_day_3h_balanced_accuracy ?? .5 * (truePositiveRate + trueNegativeRate)).toFixed(3);
+        byId("results-warning").textContent = `${(Number(metrics.median_warning_minutes) / 60).toFixed(1)} h`;
       })
       .catch(() => {});
     const svgNode = (name, attrs = {}, text = "") => {

@@ -45,10 +45,14 @@ def audit_summary(metadata: dict[str, Any], through: str) -> dict[str, Any]:
         "events_missed_at_least_3h": positive_days - alerted_3h,
         "negative_days": negative_days,
         "false_alert_days": false_alert_days,
+        "true_negative_days": negative_days - false_alert_days,
         "event_day_3h_average_precision": float(
             metrics["event_day_3h_average_precision"]
         ),
         "event_day_3h_roc_auc": float(metrics["event_day_3h_roc_auc"]),
+        "event_day_3h_balanced_accuracy": float(
+            metrics["event_day_3h_balanced_accuracy"]
+        ),
         "median_warning_minutes": float(metrics["median_warning_minutes"]),
     }
 
