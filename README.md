@@ -27,7 +27,7 @@ features are limited to:
 - explicit lowland, lake-side, and ridge temperature contrasts.
 
 All observations at or after the requested time are excluded. The model trains
-on 2017–2025 and tests once on partial 2026. Within the training period,
+on 2017–2025 and is evaluated on the evolving partial-2026 validation set. Within the training period,
 expanding-year folds for 2020–2025 produce out-of-fold predictions used to
 select L2 regularization and the alert threshold. The selected model uses
 `L2=10` and threshold `0.30509`. Fit weights preserve the lead-time value within each
@@ -45,7 +45,7 @@ The estimates have not received a separate probability-calibration fit.
 
 Across the rolling historical folds, three-hour event-day AP is `0.233`, ROC AUC
 is `0.624`, event coverage is `50.0%`, and false-alert days are `27.3%`. On the
-partial 2026 test through August 30, AP is `0.175`, AUC is `0.560`, `27.3%`
+partial 2026 validation audit through August 30, AP is `0.175`, AUC is `0.560`, `27.3%`
 (3/11) of events are alerted at least three hours early, and `20.2%` (18/89) of
 negative days receive an alert. See the
 [simplified split experiment](experiments/20260831-train-through-2025-test-2026/plan.md)
@@ -109,9 +109,73 @@ Remove `--offline` on the first dataset build to fetch and filter the required
 Météo-France archive. Generated datasets, weather caches, model artifacts, and
 W&B runs are ignored by Git.
 
-`eval_model.py` writes `artifacts/eval_2026.json`. It reports row-level metrics,
-event-day detections and misses, false-alert and correctly quiet days, ordered
-onset-horizon metrics, and one score record for each 2026 Traverse event.
+Model performance should be measured with the canonical evaluation entrypoint
+described below rather than with one-off scoring code.
+
+## Evaluate model performance
+
+`eval_model.py` is the default entrypoint for analysing every current and future
+model. It loads an already fitted model, refuses to score 2026 if that year was
+part of the fit, and evaluates the model without fitting or selecting any
+parameter. Run it after training:
+
+```bash
+uv run --frozen python eval_model.py
+```
+
+The default inputs are `artifacts/traverse_model.joblib` and
+`artifacts/traverse_timestep.csv`. The complete report is printed and written to
+`artifacts/eval_2026.json`. Alternate artifacts can be evaluated explicitly:
+
+```bash
+uv run --frozen python eval_model.py \
+  --model artifacts/candidate_model.joblib \
+  --dataset artifacts/traverse_timestep.csv \
+  --output artifacts/candidate_eval_2026.json
+```
+
+The report provides several complementary views of predictive performance:
+
+| Report block | Interpretation |
+| --- | --- |
+| `event_day_confusion.at_least_3h` | Primary operational result: detected Traverse events, false-negative events, false-alert days, and correctly quiet days at least three hours ahead. |
+| `event_day_confusion.any_lead` | The same event-day counts when an alert at any pre-onset checkpoint is accepted. |
+| `metrics` | Event-day AP, ROC AUC, coverage, false-alert rate, and warning time, plus diagnostic row-level classification and probability metrics. |
+| `onset_horizon_metrics` | Row-level diagnostics for onset within 1, 2, and 3 hours. These probabilities are not separately calibrated. |
+| `events` | One auditable record per positive day, including onset, maximum three-hour score, detection, and achieved warning lead. |
+
+Event-day results are the primary comparison because checkpoints within a day
+are correlated and operationally describe a single forecasting decision.
+Row-level TP/FP/FN/TN counts are useful diagnostics, but must not replace the
+event-day result when deciding whether one model is better.
+
+The current snapshot contains 100 validation days through **2026-08-30**: 11
+Traverse event days and 89 negative days. The deployed model detects 3/11 events
+at least three hours ahead, misses 8/11, raises a false alert on 18/89 negative
+days, and remains correctly quiet on 71/89. Its three-hour event-day AP is
+`0.175` and ROC AUC is `0.560`.
+
+### The 2026 validation set is still evolving
+
+The 2026 set is a **forward validation/audit set, not a permanently frozen test
+set**. New Windbird and Météo-France observations are appended as they become
+available. Summer 2026 is almost over, but September remains part of the model's
+May–September Traverse season, so the number of days, events, misses, and false
+alerts can still change. Re-running an unchanged model on a later snapshot can
+therefore produce different metrics.
+
+For a fair comparison between future models:
+
+1. Evaluate every candidate with `eval_model.py` on the exact same dataset
+   snapshot.
+2. Compare the `dataset_sha256`, covered-through date, row count, and event-day
+   count before comparing metrics.
+3. Record both the model and dataset SHA-256 values with reported results.
+4. If fresh 2026 data has arrived, either re-evaluate every candidate or preserve
+   the older dataset as a named frozen comparison snapshot.
+5. Do not train on 2026 or select a threshold from it and then describe its
+   scores as held-out performance. Once used to choose among models, it is
+   validation evidence; genuinely untouched evidence must come from later data.
 
 ## Predict
 

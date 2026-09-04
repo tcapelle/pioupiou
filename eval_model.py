@@ -142,8 +142,15 @@ def evaluate_2026(bundle: dict[str, Any], frame: pd.DataFrame) -> dict[str, Any]
         )
 
     events = event_scores(evaluation, probabilities, threshold)
+    evaluation_dates = pd.to_datetime(evaluation["date"], errors="raise")
     return {
         "year": EVALUATION_YEAR,
+        "validation_status": "evolving",
+        "date_range": [
+            evaluation_dates.min().strftime("%Y-%m-%d"),
+            evaluation_dates.max().strftime("%Y-%m-%d"),
+        ],
+        "through": evaluation_dates.max().strftime("%Y-%m-%d"),
         "rows": len(evaluation),
         "days": int(evaluation["date"].nunique()),
         "threshold": threshold,

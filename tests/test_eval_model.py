@@ -37,6 +37,9 @@ class EvalModelTests(unittest.TestCase):
         report = evaluate_2026(bundle, frame)
 
         self.assertEqual(report["year"], 2026)
+        self.assertEqual(report["validation_status"], "evolving")
+        self.assertEqual(report["through"], "2026-07-02")
+        self.assertEqual(report["date_range"], ["2026-07-01", "2026-07-02"])
         self.assertEqual(report["days"], 2)
         self.assertEqual(report["metrics"]["positive_days"], 1.0)
         self.assertEqual(report["metrics"]["negative_days"], 1.0)
