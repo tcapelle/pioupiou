@@ -1,0 +1,17 @@
+{
+  "event_day_3h_average_precision": 0.1746761152915304,
+  "event_day_3h_balanced_accuracy": 0.5352400408580184,
+  "event_day_3h_roc_auc": 0.5597548518896834,
+  "event_days": 11,
+  "events_alerted_at_least_3h": 3,
+  "events_missed_at_least_3h": 8,
+  "false_alert_days": 18,
+  "median_warning_minutes": 477.65833333333336,
+  "negative_days": 89,
+  "schema_version": 1,
+  "source": "retrospective_audit",
+  "source_note": "Retrospective audit on later 2026 data; not an untouched prospective evaluation and not a live accuracy estimate.",
+  "through": "2026-08-30",
+  "true_negative_days": 71,
+  "year": 2026
+}

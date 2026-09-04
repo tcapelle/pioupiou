@@ -1,0 +1,551 @@
+{
+  "date": "2026-08-27",
+  "event_onset_minutes": null,
+  "label": false,
+  "points": [
+    {
+      "current_wind": {
+        "age_minutes": 3.1666666666666665,
+        "average_kmh": 2.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 4.25,
+        "minimum_kmh": 0.75,
+        "observation_time": "2026-08-27T06:26:50+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.0015445384920566,
+        "180m": 0.0023180946798072,
+        "60m": 0.0006771509330863
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T06:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.2850073583656693
+    },
+    {
+      "current_wind": {
+        "age_minutes": 3.0166666666666666,
+        "average_kmh": 3.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 5.25,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-08-27T06:56:59+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.001559246583647,
+        "180m": 0.0028718069395746,
+        "60m": 0.0006786727170214
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T07:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.2762075268765324
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.8666666666666667,
+        "average_kmh": 1.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 4.75,
+        "minimum_kmh": 0.0,
+        "observation_time": "2026-08-27T07:27:08+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.0017314947022481,
+        "180m": 0.0036014488536153,
+        "60m": 0.0007652005046454
+      },
+      "predict_traverse": true,
+      "prediction_time": "2026-08-27T07:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.3895742625141831
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.716666666666667,
+        "average_kmh": 2.25,
+        "direction_degrees": 90.0,
+        "gust_kmh": 3.0,
+        "minimum_kmh": 1.0,
+        "observation_time": "2026-08-27T07:57:17+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.0017314947022481,
+        "180m": 0.0036014488536153,
+        "60m": 0.0007652005046454
+      },
+      "predict_traverse": true,
+      "prediction_time": "2026-08-27T08:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.3895742625141831
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.55,
+        "average_kmh": 0.5,
+        "direction_degrees": 112.5,
+        "gust_kmh": 2.25,
+        "minimum_kmh": 0.0,
+        "observation_time": "2026-08-27T08:27:27+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.0019716265648617,
+        "180m": 0.004141118391244,
+        "60m": 0.0008999240419589
+      },
+      "predict_traverse": true,
+      "prediction_time": "2026-08-27T08:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.3372169001092872
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.4,
+        "average_kmh": 4.75,
+        "direction_degrees": 337.5,
+        "gust_kmh": 6.75,
+        "minimum_kmh": 3.0,
+        "observation_time": "2026-08-27T08:57:36+02:00"
+      },
+      "onset_evidence": 0.0981504483657762,
+      "onset_within_probabilities": {
+        "120m": 0.0021059036620322,
+        "180m": 0.0043492539450682,
+        "60m": 0.0009750751267787
+      },
+      "predict_traverse": true,
+      "prediction_time": "2026-08-27T09:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.3557036519026836
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.25,
+        "average_kmh": 4.75,
+        "direction_degrees": 22.5,
+        "gust_kmh": 6.75,
+        "minimum_kmh": 2.75,
+        "observation_time": "2026-08-27T09:27:45+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.0027728070400741,
+        "180m": 0.0122752813975716,
+        "60m": 0.0012634922731098
+      },
+      "predict_traverse": true,
+      "prediction_time": "2026-08-27T09:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.3585785297957598
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.1,
+        "average_kmh": 3.75,
+        "direction_degrees": 292.5,
+        "gust_kmh": 5.0,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-08-27T09:57:54+02:00"
+      },
+      "onset_evidence": 0.1870706396823609,
+      "onset_within_probabilities": {
+        "120m": 0.0030586520428394,
+        "180m": 0.0119583488754589,
+        "60m": 0.001480870490616
+      },
+      "predict_traverse": true,
+      "prediction_time": "2026-08-27T10:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.3513055061543882
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.95,
+        "average_kmh": 1.5,
+        "direction_degrees": 292.5,
+        "gust_kmh": 4.0,
+        "minimum_kmh": 0.0,
+        "observation_time": "2026-08-27T10:28:03+02:00"
+      },
+      "onset_evidence": 0.0748282558729443,
+      "onset_within_probabilities": {
+        "120m": 0.0079175011556731,
+        "180m": 0.0303895460593966,
+        "60m": 0.0026839675350397
+      },
+      "predict_traverse": true,
+      "prediction_time": "2026-08-27T10:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.420766384748959
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.8,
+        "average_kmh": 3.25,
+        "direction_degrees": 337.5,
+        "gust_kmh": 4.75,
+        "minimum_kmh": 1.25,
+        "observation_time": "2026-08-27T10:58:12+02:00"
+      },
+      "onset_evidence": 0.0671555699344784,
+      "onset_within_probabilities": {
+        "120m": 0.0092643888959504,
+        "180m": 0.0366297794634351,
+        "60m": 0.0032597757141365
+      },
+      "predict_traverse": true,
+      "prediction_time": "2026-08-27T11:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.4156363380268176
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.65,
+        "average_kmh": 7.25,
+        "direction_degrees": 337.5,
+        "gust_kmh": 8.75,
+        "minimum_kmh": 5.5,
+        "observation_time": "2026-08-27T11:28:21+02:00"
+      },
+      "onset_evidence": 0.1498085790846057,
+      "onset_within_probabilities": {
+        "120m": 0.009686602970591,
+        "180m": 0.0342314743665127,
+        "60m": 0.0046004131537975
+      },
+      "predict_traverse": true,
+      "prediction_time": "2026-08-27T11:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.3575466280307343
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.5,
+        "average_kmh": 6.75,
+        "direction_degrees": 22.5,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 4.0,
+        "observation_time": "2026-08-27T11:58:30+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.0193781487602271,
+        "180m": 0.0452786108644292,
+        "60m": 0.0056251415634008
+      },
+      "predict_traverse": true,
+      "prediction_time": "2026-08-27T12:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.3499064504399258
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.35,
+        "average_kmh": 10.5,
+        "direction_degrees": 337.5,
+        "gust_kmh": 12.0,
+        "minimum_kmh": 8.25,
+        "observation_time": "2026-08-27T12:28:39+02:00"
+      },
+      "onset_evidence": 0.2169641490190842,
+      "onset_within_probabilities": {
+        "120m": 0.019709780614061,
+        "180m": 0.0405492128039678,
+        "60m": 0.0048231786845145
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T12:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.2451979841025888
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.1833333333333333,
+        "average_kmh": 12.5,
+        "direction_degrees": 337.5,
+        "gust_kmh": 14.5,
+        "minimum_kmh": 9.75,
+        "observation_time": "2026-08-27T12:58:49+02:00"
+      },
+      "onset_evidence": 0.2582906535941479,
+      "onset_within_probabilities": {
+        "120m": 0.024482302918566,
+        "180m": 0.0485855876384485,
+        "60m": 0.0089415911829488
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T13:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.2743140393045524
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.0333333333333334,
+        "average_kmh": 11.5,
+        "direction_degrees": 337.5,
+        "gust_kmh": 13.5,
+        "minimum_kmh": 9.5,
+        "observation_time": "2026-08-27T13:28:58+02:00"
+      },
+      "onset_evidence": 0.237627401306616,
+      "onset_within_probabilities": {
+        "120m": 0.0221511190821942,
+        "180m": 0.0462539068581517,
+        "60m": 0.0085218177505943
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T13:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.2180454153555722
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.9,
+        "average_kmh": 12.0,
+        "direction_degrees": 337.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 10.5,
+        "observation_time": "2026-08-27T13:59:06+02:00"
+      },
+      "onset_evidence": 0.2479590274503819,
+      "onset_within_probabilities": {
+        "120m": 0.0227101371377114,
+        "180m": 0.0461652781694905,
+        "60m": 0.0086817591728266
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T14:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.2178365650626546
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.75,
+        "average_kmh": 8.5,
+        "direction_degrees": 337.5,
+        "gust_kmh": 9.0,
+        "minimum_kmh": 7.5,
+        "observation_time": "2026-08-27T14:29:15+02:00"
+      },
+      "onset_evidence": 0.1756376444440205,
+      "onset_within_probabilities": {
+        "120m": 0.0387519330392491,
+        "180m": 0.0823967438106901,
+        "60m": 0.010403043650516
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T14:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.1813767159027861
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.5833333333333334,
+        "average_kmh": 5.75,
+        "direction_degrees": 0.0,
+        "gust_kmh": 7.0,
+        "minimum_kmh": 4.75,
+        "observation_time": "2026-08-27T14:59:25+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.0322856656987605,
+        "180m": 0.0657584872334534,
+        "60m": 0.007841515783152
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T15:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.1755685716956308
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.43333333333333335,
+        "average_kmh": 6.0,
+        "direction_degrees": 337.5,
+        "gust_kmh": 7.0,
+        "minimum_kmh": 4.75,
+        "observation_time": "2026-08-27T15:29:34+02:00"
+      },
+      "onset_evidence": 0.1239795137251909,
+      "onset_within_probabilities": {
+        "120m": 0.0312734045708809,
+        "180m": 0.0647224535285798,
+        "60m": 0.0062756856642089
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T15:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.1196453117907622
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.2833333333333333,
+        "average_kmh": 7.25,
+        "direction_degrees": 337.5,
+        "gust_kmh": 8.75,
+        "minimum_kmh": 5.5,
+        "observation_time": "2026-08-27T15:59:43+02:00"
+      },
+      "onset_evidence": 0.1498085790846057,
+      "onset_within_probabilities": {
+        "120m": 0.0378866212128739,
+        "180m": 0.0822717038825818,
+        "60m": 0.0081008108953688
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T16:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.108881676273229
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.13333333333333333,
+        "average_kmh": 6.75,
+        "direction_degrees": 0.0,
+        "gust_kmh": 7.5,
+        "minimum_kmh": 6.0,
+        "observation_time": "2026-08-27T16:29:52+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.0491566756624338,
+        "180m": 0.1016080702664456,
+        "60m": 0.0135368953783583
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T16:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.0975671583369603
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.983333333333333,
+        "average_kmh": 6.5,
+        "direction_degrees": 337.5,
+        "gust_kmh": 7.5,
+        "minimum_kmh": 5.25,
+        "observation_time": "2026-08-27T16:55:01+02:00"
+      },
+      "onset_evidence": 0.1343111398689569,
+      "onset_within_probabilities": {
+        "120m": 0.0514239513839035,
+        "180m": 0.083234214499446,
+        "60m": 0.0153310906659343
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T17:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.092438459515389
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.833333333333333,
+        "average_kmh": 2.75,
+        "direction_degrees": 315.0,
+        "gust_kmh": 3.5,
+        "minimum_kmh": 1.75,
+        "observation_time": "2026-08-27T17:25:10+02:00"
+      },
+      "onset_evidence": 0.1049969572496223,
+      "onset_within_probabilities": {
+        "120m": 0.0347023406242179,
+        "180m": 0.0388125808933087,
+        "60m": 0.0119682443774122
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T17:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.0475491817883279
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.666666666666667,
+        "average_kmh": 0.0,
+        "direction_degrees": 225.0,
+        "gust_kmh": 0.0,
+        "minimum_kmh": 0.0,
+        "observation_time": "2026-08-27T17:55:20+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.022621422698921,
+        "180m": 0.0260151954202807,
+        "60m": 0.0107678800039672
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T18:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.0308102160513409
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.533333333333333,
+        "average_kmh": 0.25,
+        "direction_degrees": 157.5,
+        "gust_kmh": 1.25,
+        "minimum_kmh": 0.0,
+        "observation_time": "2026-08-27T18:25:28+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.0166250402527324,
+        "180m": 0.0196782655082203,
+        "60m": 0.0099428456252917
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T18:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.0297400106466222
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.366666666666666,
+        "average_kmh": 0.25,
+        "direction_degrees": 0.0,
+        "gust_kmh": 3.25,
+        "minimum_kmh": 0.0,
+        "observation_time": "2026-08-27T18:55:38+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.01616711711136,
+        "180m": 0.0192584723030015,
+        "60m": 0.0095489292872882
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T19:00:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.0297400106466222
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.216666666666667,
+        "average_kmh": 2.5,
+        "direction_degrees": 22.5,
+        "gust_kmh": 4.5,
+        "minimum_kmh": 1.0,
+        "observation_time": "2026-08-27T19:25:47+02:00"
+      },
+      "onset_evidence": 0.0,
+      "onset_within_probabilities": {
+        "120m": 0.0193996461605604,
+        "180m": 0.0229355458994863,
+        "60m": 0.0101172584283989
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-08-27T19:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.0261112539167987
+    }
+  ],
+  "schema_version": 1,
+  "source": "retrospective_reconstruction",
+  "source_note": "Reconstructed after the date from archived observations using the frozen deployment model; not a contemporaneously published forecast.",
+  "threshold": 0.3050939984887365
+}
