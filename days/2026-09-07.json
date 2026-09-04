@@ -1,0 +1,1435 @@
+{
+  "date": "2026-09-07",
+  "event_onset_minutes": null,
+  "label": null,
+  "points": [
+    {
+      "current_wind": {
+        "age_minutes": 3.316666666666667,
+        "average_kmh": 5.5,
+        "direction_degrees": 157.5,
+        "gust_kmh": 9.0,
+        "minimum_kmh": 2.0,
+        "observation_time": "2026-09-06T23:58:41+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:02:00+02:00",
+      "published_at": "2026-09-06T22:02:56.362830+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.316666666666666,
+        "average_kmh": 5.5,
+        "direction_degrees": 157.5,
+        "gust_kmh": 9.0,
+        "minimum_kmh": 2.0,
+        "observation_time": "2026-09-06T23:58:41+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:04:00+02:00",
+      "published_at": "2026-09-06T22:04:49.069160+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 9.316666666666666,
+        "average_kmh": 5.5,
+        "direction_degrees": 157.5,
+        "gust_kmh": 9.0,
+        "minimum_kmh": 2.0,
+        "observation_time": "2026-09-06T23:58:41+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:08:00+02:00",
+      "published_at": "2026-09-06T22:08:00.903064+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.26666666666666666,
+        "average_kmh": 4.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 6.5,
+        "minimum_kmh": 2.75,
+        "observation_time": "2026-09-07T00:08:44+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:09:00+02:00",
+      "published_at": "2026-09-06T22:09:53.645081+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.266666666666667,
+        "average_kmh": 4.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 6.5,
+        "minimum_kmh": 2.75,
+        "observation_time": "2026-09-07T00:08:44+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:13:00+02:00",
+      "published_at": "2026-09-06T22:13:05.337537+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.266666666666667,
+        "average_kmh": 4.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 6.5,
+        "minimum_kmh": 2.75,
+        "observation_time": "2026-09-07T00:08:44+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:14:00+02:00",
+      "published_at": "2026-09-06T22:14:57.982911+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 9.266666666666667,
+        "average_kmh": 4.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 6.5,
+        "minimum_kmh": 2.75,
+        "observation_time": "2026-09-07T00:08:44+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:18:00+02:00",
+      "published_at": "2026-09-06T22:18:09.673537+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.2166666666666666,
+        "average_kmh": 5.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 8.5,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T00:18:47+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:20:00+02:00",
+      "published_at": "2026-09-06T22:20:02.723760+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.216666666666667,
+        "average_kmh": 5.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 8.5,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T00:18:47+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:23:00+02:00",
+      "published_at": "2026-09-06T22:23:13.969086+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.216666666666667,
+        "average_kmh": 5.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 8.5,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T00:18:47+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:25:00+02:00",
+      "published_at": "2026-09-06T22:25:07.165106+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 9.216666666666667,
+        "average_kmh": 5.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 8.5,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T00:18:47+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:28:00+02:00",
+      "published_at": "2026-09-06T22:28:18.548811+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.1666666666666667,
+        "average_kmh": 4.5,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.5,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T00:28:50+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:30:00+02:00",
+      "published_at": "2026-09-06T22:30:11.502851+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.166666666666667,
+        "average_kmh": 4.5,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.5,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T00:28:50+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:33:00+02:00",
+      "published_at": "2026-09-06T22:33:22.779974+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.166666666666667,
+        "average_kmh": 4.5,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.5,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T00:28:50+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:35:00+02:00",
+      "published_at": "2026-09-06T22:35:15.834239+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 9.166666666666666,
+        "average_kmh": 4.5,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.5,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T00:28:50+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:38:00+02:00",
+      "published_at": "2026-09-06T22:38:27.114867+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.1166666666666667,
+        "average_kmh": 6.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T00:38:53+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:40:00+02:00",
+      "published_at": "2026-09-06T22:40:20.271418+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.116666666666666,
+        "average_kmh": 6.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T00:38:53+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:43:00+02:00",
+      "published_at": "2026-09-06T22:43:31.439201+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.116666666666666,
+        "average_kmh": 6.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T00:38:53+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:45:00+02:00",
+      "published_at": "2026-09-06T22:45:24.570246+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 9.116666666666667,
+        "average_kmh": 6.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T00:38:53+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:48:00+02:00",
+      "published_at": "2026-09-06T22:48:35.774205+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.0666666666666667,
+        "average_kmh": 6.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 1.0,
+        "observation_time": "2026-09-07T00:48:56+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:50:00+02:00",
+      "published_at": "2026-09-06T22:50:29.015473+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.066666666666666,
+        "average_kmh": 6.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 1.0,
+        "observation_time": "2026-09-07T00:48:56+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:53:00+02:00",
+      "published_at": "2026-09-06T22:53:40.210594+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.066666666666666,
+        "average_kmh": 6.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 1.0,
+        "observation_time": "2026-09-07T00:48:56+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:55:00+02:00",
+      "published_at": "2026-09-06T22:55:33.265203+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 9.066666666666666,
+        "average_kmh": 6.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 1.0,
+        "observation_time": "2026-09-07T00:48:56+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T00:58:00+02:00",
+      "published_at": "2026-09-06T22:58:44.852015+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.0166666666666666,
+        "average_kmh": 6.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 4.25,
+        "observation_time": "2026-09-07T00:58:59+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:00:00+02:00",
+      "published_at": "2026-09-06T23:00:37.796736+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.016666666666667,
+        "average_kmh": 6.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 4.25,
+        "observation_time": "2026-09-07T00:58:59+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:03:00+02:00",
+      "published_at": "2026-09-06T23:03:49.084261+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.016666666666667,
+        "average_kmh": 6.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 4.25,
+        "observation_time": "2026-09-07T00:58:59+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:05:00+02:00",
+      "published_at": "2026-09-06T23:05:42.237986+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 9.016666666666667,
+        "average_kmh": 6.75,
+        "direction_degrees": 157.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 4.25,
+        "observation_time": "2026-09-07T00:58:59+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:08:00+02:00",
+      "published_at": "2026-09-06T23:08:53.309142+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.9666666666666667,
+        "average_kmh": 6.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 9.75,
+        "minimum_kmh": 4.0,
+        "observation_time": "2026-09-07T01:09:02+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:10:00+02:00",
+      "published_at": "2026-09-06T23:10:46.460642+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 3.966666666666667,
+        "average_kmh": 6.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 9.75,
+        "minimum_kmh": 4.0,
+        "observation_time": "2026-09-07T01:09:02+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:13:00+02:00",
+      "published_at": "2026-09-06T23:13:57.799626+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.966666666666667,
+        "average_kmh": 6.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 9.75,
+        "minimum_kmh": 4.0,
+        "observation_time": "2026-09-07T01:09:02+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:15:00+02:00",
+      "published_at": "2026-09-06T23:15:50.897691+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 9.966666666666667,
+        "average_kmh": 6.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 9.75,
+        "minimum_kmh": 4.0,
+        "observation_time": "2026-09-07T01:09:02+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:19:00+02:00",
+      "published_at": "2026-09-06T23:19:02.074742+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.9,
+        "average_kmh": 6.0,
+        "direction_degrees": 157.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 2.0,
+        "observation_time": "2026-09-07T01:19:06+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:20:00+02:00",
+      "published_at": "2026-09-06T23:20:55.337234+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.9,
+        "average_kmh": 6.0,
+        "direction_degrees": 157.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 2.0,
+        "observation_time": "2026-09-07T01:19:06+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:24:00+02:00",
+      "published_at": "2026-09-06T23:24:06.612985+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.9,
+        "average_kmh": 6.0,
+        "direction_degrees": 157.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 2.0,
+        "observation_time": "2026-09-07T01:19:06+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:25:00+02:00",
+      "published_at": "2026-09-06T23:25:59.744468+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.866666666666666,
+        "average_kmh": 6.25,
+        "direction_degrees": 157.5,
+        "gust_kmh": 9.5,
+        "minimum_kmh": 2.25,
+        "observation_time": "2026-09-07T01:24:08+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:29:00+02:00",
+      "published_at": "2026-09-06T23:29:11.113006+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.8666666666666667,
+        "average_kmh": 6.0,
+        "direction_degrees": 157.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 1.0,
+        "observation_time": "2026-09-07T01:29:08+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:31:00+02:00",
+      "published_at": "2026-09-06T23:31:04.105904+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.866666666666666,
+        "average_kmh": 6.0,
+        "direction_degrees": 157.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 1.0,
+        "observation_time": "2026-09-07T01:29:08+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:34:00+02:00",
+      "published_at": "2026-09-06T23:34:15.484425+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.866666666666666,
+        "average_kmh": 6.0,
+        "direction_degrees": 157.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 1.0,
+        "observation_time": "2026-09-07T01:29:08+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:36:00+02:00",
+      "published_at": "2026-09-06T23:36:08.376689+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.816666666666666,
+        "average_kmh": 4.75,
+        "direction_degrees": 135.0,
+        "gust_kmh": 9.5,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T01:34:11+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:39:00+02:00",
+      "published_at": "2026-09-06T23:39:19.921175+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.8166666666666667,
+        "average_kmh": 6.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.0,
+        "minimum_kmh": 0.75,
+        "observation_time": "2026-09-07T01:39:11+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:41:00+02:00",
+      "published_at": "2026-09-06T23:41:12.762704+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.816666666666666,
+        "average_kmh": 6.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.0,
+        "minimum_kmh": 0.75,
+        "observation_time": "2026-09-07T01:39:11+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:44:00+02:00",
+      "published_at": "2026-09-06T23:44:24.453944+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.816666666666666,
+        "average_kmh": 6.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.0,
+        "minimum_kmh": 0.75,
+        "observation_time": "2026-09-07T01:39:11+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:46:00+02:00",
+      "published_at": "2026-09-06T23:46:17.141211+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.75,
+        "average_kmh": 7.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 13.5,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T01:44:15+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:49:00+02:00",
+      "published_at": "2026-09-06T23:49:28.694407+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.75,
+        "average_kmh": 6.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 2.25,
+        "observation_time": "2026-09-07T01:49:15+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:51:00+02:00",
+      "published_at": "2026-09-06T23:51:21.526565+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.75,
+        "average_kmh": 6.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 2.25,
+        "observation_time": "2026-09-07T01:49:15+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:54:00+02:00",
+      "published_at": "2026-09-06T23:54:32.912105+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.75,
+        "average_kmh": 6.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 12.5,
+        "minimum_kmh": 2.25,
+        "observation_time": "2026-09-07T01:49:15+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:56:00+02:00",
+      "published_at": "2026-09-06T23:56:25.963534+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.7,
+        "average_kmh": 9.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 14.5,
+        "minimum_kmh": 3.75,
+        "observation_time": "2026-09-07T01:54:18+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T01:59:00+02:00",
+      "published_at": "2026-09-06T23:59:37.345367+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.7,
+        "average_kmh": 7.0,
+        "direction_degrees": 90.0,
+        "gust_kmh": 13.5,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T01:59:18+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:01:00+02:00",
+      "published_at": "2026-09-07T00:01:30.503527+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.7,
+        "average_kmh": 7.0,
+        "direction_degrees": 90.0,
+        "gust_kmh": 13.5,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T01:59:18+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:04:00+02:00",
+      "published_at": "2026-09-07T00:04:41.677404+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.7,
+        "average_kmh": 7.0,
+        "direction_degrees": 90.0,
+        "gust_kmh": 13.5,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T01:59:18+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:06:00+02:00",
+      "published_at": "2026-09-07T00:06:35.036460+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.666666666666667,
+        "average_kmh": 4.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 1.0,
+        "observation_time": "2026-09-07T02:04:20+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:09:00+02:00",
+      "published_at": "2026-09-07T00:09:45.960809+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.6666666666666667,
+        "average_kmh": 7.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.0,
+        "minimum_kmh": 4.25,
+        "observation_time": "2026-09-07T02:09:20+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:11:00+02:00",
+      "published_at": "2026-09-07T00:11:39.326916+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.666666666666667,
+        "average_kmh": 7.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.0,
+        "minimum_kmh": 4.25,
+        "observation_time": "2026-09-07T02:09:20+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:14:00+02:00",
+      "published_at": "2026-09-07T00:14:50.209771+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.666666666666667,
+        "average_kmh": 7.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.0,
+        "minimum_kmh": 4.25,
+        "observation_time": "2026-09-07T02:09:20+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:16:00+02:00",
+      "published_at": "2026-09-07T00:16:43.657612+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.616666666666666,
+        "average_kmh": 7.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 4.0,
+        "observation_time": "2026-09-07T02:14:23+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:19:00+02:00",
+      "published_at": "2026-09-07T00:19:54.634810+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.6166666666666667,
+        "average_kmh": 6.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T02:19:23+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:21:00+02:00",
+      "published_at": "2026-09-07T00:21:48.031889+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 4.616666666666666,
+        "average_kmh": 6.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T02:19:23+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:24:00+02:00",
+      "published_at": "2026-09-07T00:24:59.075539+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.616666666666666,
+        "average_kmh": 6.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T02:19:23+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:26:00+02:00",
+      "published_at": "2026-09-07T00:26:52.520897+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.5666666666666667,
+        "average_kmh": 7.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 1.75,
+        "observation_time": "2026-09-07T02:29:26+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:30:00+02:00",
+      "published_at": "2026-09-07T00:30:03.494715+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.5666666666666667,
+        "average_kmh": 7.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 1.75,
+        "observation_time": "2026-09-07T02:29:26+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:31:00+02:00",
+      "published_at": "2026-09-07T00:31:56.954845+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.566666666666666,
+        "average_kmh": 7.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 1.75,
+        "observation_time": "2026-09-07T02:29:26+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:35:00+02:00",
+      "published_at": "2026-09-07T00:35:07.926275+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 7.566666666666666,
+        "average_kmh": 7.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 1.75,
+        "observation_time": "2026-09-07T02:29:26+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:37:00+02:00",
+      "published_at": "2026-09-07T00:37:01.398479+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.5166666666666667,
+        "average_kmh": 5.5,
+        "direction_degrees": 112.5,
+        "gust_kmh": 7.75,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T02:39:29+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:40:00+02:00",
+      "published_at": "2026-09-07T00:40:12.195429+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.5166666666666666,
+        "average_kmh": 5.5,
+        "direction_degrees": 112.5,
+        "gust_kmh": 7.75,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T02:39:29+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:42:00+02:00",
+      "published_at": "2026-09-07T00:42:05.772709+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.516666666666667,
+        "average_kmh": 5.5,
+        "direction_degrees": 112.5,
+        "gust_kmh": 7.75,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T02:39:29+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:45:00+02:00",
+      "published_at": "2026-09-07T00:45:16.529260+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 7.516666666666667,
+        "average_kmh": 5.5,
+        "direction_degrees": 112.5,
+        "gust_kmh": 7.75,
+        "minimum_kmh": 3.25,
+        "observation_time": "2026-09-07T02:39:29+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:47:00+02:00",
+      "published_at": "2026-09-07T00:47:10.164971+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.4666666666666667,
+        "average_kmh": 4.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T02:49:32+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:50:00+02:00",
+      "published_at": "2026-09-07T00:50:21.064506+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.466666666666667,
+        "average_kmh": 4.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T02:49:32+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:52:00+02:00",
+      "published_at": "2026-09-07T00:52:14.732905+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.466666666666667,
+        "average_kmh": 4.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T02:49:32+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:55:00+02:00",
+      "published_at": "2026-09-07T00:55:25.297740+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 7.466666666666667,
+        "average_kmh": 4.25,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T02:49:32+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T02:57:00+02:00",
+      "published_at": "2026-09-07T00:57:19.223291+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.4166666666666667,
+        "average_kmh": 7.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 3.0,
+        "observation_time": "2026-09-07T02:59:35+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:00:00+02:00",
+      "published_at": "2026-09-07T01:00:29.733200+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.4166666666666665,
+        "average_kmh": 7.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 3.0,
+        "observation_time": "2026-09-07T02:59:35+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:02:00+02:00",
+      "published_at": "2026-09-07T01:02:23.597978+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.416666666666667,
+        "average_kmh": 7.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 3.0,
+        "observation_time": "2026-09-07T02:59:35+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:05:00+02:00",
+      "published_at": "2026-09-07T01:05:34.008234+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 7.416666666666667,
+        "average_kmh": 7.25,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 3.0,
+        "observation_time": "2026-09-07T02:59:35+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:07:00+02:00",
+      "published_at": "2026-09-07T01:07:27.863840+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.35,
+        "average_kmh": 6.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T03:09:39+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:10:00+02:00",
+      "published_at": "2026-09-07T01:10:38.379751+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.35,
+        "average_kmh": 6.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T03:09:39+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:12:00+02:00",
+      "published_at": "2026-09-07T01:12:32.250897+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.35,
+        "average_kmh": 6.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T03:09:39+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:15:00+02:00",
+      "published_at": "2026-09-07T01:15:42.714386+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 7.35,
+        "average_kmh": 6.0,
+        "direction_degrees": 112.5,
+        "gust_kmh": 10.0,
+        "minimum_kmh": 1.5,
+        "observation_time": "2026-09-07T03:09:39+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:17:00+02:00",
+      "published_at": "2026-09-07T01:17:36.633174+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.31666666666666665,
+        "average_kmh": 7.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 5.0,
+        "observation_time": "2026-09-07T03:19:41+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:20:00+02:00",
+      "published_at": "2026-09-07T01:20:47.035838+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.316666666666667,
+        "average_kmh": 7.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 5.0,
+        "observation_time": "2026-09-07T03:19:41+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:22:00+02:00",
+      "published_at": "2026-09-07T01:22:40.994284+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.316666666666666,
+        "average_kmh": 7.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 5.0,
+        "observation_time": "2026-09-07T03:19:41+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:25:00+02:00",
+      "published_at": "2026-09-07T01:25:51.274748+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 7.316666666666666,
+        "average_kmh": 7.75,
+        "direction_degrees": 112.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 5.0,
+        "observation_time": "2026-09-07T03:19:41+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:27:00+02:00",
+      "published_at": "2026-09-07T01:27:45.658205+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 0.25,
+        "average_kmh": 4.0,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 2.0,
+        "observation_time": "2026-09-07T03:29:45+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:30:00+02:00",
+      "published_at": "2026-09-07T01:30:55.762403+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.25,
+        "average_kmh": 4.0,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 2.0,
+        "observation_time": "2026-09-07T03:29:45+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:32:00+02:00",
+      "published_at": "2026-09-07T01:32:49.986521+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 5.25,
+        "average_kmh": 4.0,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 2.0,
+        "observation_time": "2026-09-07T03:29:45+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:35:00+02:00",
+      "published_at": "2026-09-07T01:35:59.917783+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 7.25,
+        "average_kmh": 4.0,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 2.0,
+        "observation_time": "2026-09-07T03:29:45+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:37:00+02:00",
+      "published_at": "2026-09-07T01:37:54.400671+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 1.2,
+        "average_kmh": 4.0,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 2.25,
+        "observation_time": "2026-09-07T03:39:48+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:41:00+02:00",
+      "published_at": "2026-09-07T01:41:04.350306+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 2.2,
+        "average_kmh": 4.0,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 2.25,
+        "observation_time": "2026-09-07T03:39:48+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:42:00+02:00",
+      "published_at": "2026-09-07T01:42:58.782584+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    },
+    {
+      "current_wind": {
+        "age_minutes": 6.2,
+        "average_kmh": 4.0,
+        "direction_degrees": 135.0,
+        "gust_kmh": 8.0,
+        "minimum_kmh": 2.25,
+        "observation_time": "2026-09-07T03:39:48+02:00"
+      },
+      "model_kind": "remaining_wind",
+      "model_sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19",
+      "prediction_time": "2026-09-07T03:46:00+02:00",
+      "published_at": "2026-09-07T01:46:08.775137+00:00",
+      "schema_version": 1,
+      "status": "outside_prediction_window"
+    }
+  ],
+  "schema_version": 1,
+  "source": "live_published",
+  "source_note": "Published contemporaneously by the live inference computer.",
+  "threshold": null
+}

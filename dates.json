@@ -1,0 +1,653 @@
+{
+  "schema_version": 1,
+  "dates": [
+    {
+      "date": "2026-05-23",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 11
+    },
+    {
+      "date": "2026-05-24",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-05-25",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-05-26",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-05-27",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-05-28",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-05-29",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-05-30",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-05-31",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 16
+    },
+    {
+      "date": "2026-06-01",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 26
+    },
+    {
+      "date": "2026-06-02",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-03",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-04",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 9
+    },
+    {
+      "date": "2026-06-05",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 5
+    },
+    {
+      "date": "2026-06-06",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-07",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-08",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 26
+    },
+    {
+      "date": "2026-06-09",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-10",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 24
+    },
+    {
+      "date": "2026-06-11",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-12",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-13",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-14",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-15",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-16",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-17",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-18",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-19",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 22
+    },
+    {
+      "date": "2026-06-20",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-21",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-22",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-23",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-24",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-25",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-26",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-27",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-28",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-06-29",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 16
+    },
+    {
+      "date": "2026-06-30",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-01",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-02",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-03",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-04",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-05",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 24
+    },
+    {
+      "date": "2026-07-06",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-07",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-08",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-09",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-10",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-11",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-12",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-13",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-14",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-15",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 9
+    },
+    {
+      "date": "2026-07-16",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 7
+    },
+    {
+      "date": "2026-07-17",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 1
+    },
+    {
+      "date": "2026-07-18",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-19",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-20",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 24
+    },
+    {
+      "date": "2026-07-21",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-22",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-23",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-24",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-25",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-26",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-27",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-28",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-29",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-07-30",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 18
+    },
+    {
+      "date": "2026-07-31",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-01",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 25
+    },
+    {
+      "date": "2026-08-02",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-03",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-04",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-05",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-06",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-07",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-08",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-09",
+      "source": "retrospective_reconstruction",
+      "label": true,
+      "points": 23
+    },
+    {
+      "date": "2026-08-10",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-11",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-12",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-13",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-14",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-15",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-16",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-17",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-18",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-19",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-20",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-21",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-22",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-23",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-24",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-25",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-26",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-27",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-28",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-29",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-30",
+      "source": "retrospective_reconstruction",
+      "label": false,
+      "points": 27
+    },
+    {
+      "date": "2026-08-31",
+      "source": "live_published",
+      "label": null,
+      "points": 234
+    },
+    {
+      "date": "2026-09-01",
+      "source": "live_published",
+      "label": null,
+      "points": 283
+    },
+    {
+      "date": "2026-09-02",
+      "source": "live_published",
+      "label": null,
+      "points": 282
+    },
+    {
+      "date": "2026-09-03",
+      "source": "live_published",
+      "label": null,
+      "points": 282
+    },
+    {
+      "date": "2026-09-04",
+      "source": "live_published",
+      "label": null,
+      "points": 283
+    },
+    {
+      "date": "2026-09-05",
+      "source": "live_published",
+      "label": null,
+      "points": 283
+    },
+    {
+      "date": "2026-09-06",
+      "source": "live_published",
+      "label": null,
+      "points": 330
+    },
+    {
+      "date": "2026-09-07",
+      "source": "live_published",
+      "label": null,
+      "points": 89
+    }
+  ]
+}
