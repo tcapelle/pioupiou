@@ -1,0 +1,31 @@
+{
+  "date": "2026-07-17",
+  "event_onset_minutes": null,
+  "label": false,
+  "points": [
+    {
+      "current_wind": {
+        "age_minutes": 1.7166666666666666,
+        "average_kmh": 6.0,
+        "direction_degrees": 292.5,
+        "gust_kmh": 11.5,
+        "minimum_kmh": 0.5,
+        "observation_time": "2026-07-17T19:28:17+02:00"
+      },
+      "onset_evidence": 0.2993130234917775,
+      "onset_within_probabilities": {
+        "120m": 0.0309763056786846,
+        "180m": 0.0343124000297125,
+        "60m": 0.024165682561635
+      },
+      "predict_traverse": false,
+      "prediction_time": "2026-07-17T19:30:00+02:00",
+      "status": "retrospective_reconstruction",
+      "traverse_probability": 0.0219226678453339
+    }
+  ],
+  "schema_version": 1,
+  "source": "retrospective_reconstruction",
+  "source_note": "Reconstructed after the date from archived observations using the frozen deployment model; not a contemporaneously published forecast.",
+  "threshold": 0.3050939984887365
+}
