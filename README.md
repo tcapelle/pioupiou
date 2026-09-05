@@ -16,9 +16,9 @@ has full training value and one five minutes early has very little.
 
 ## Model
 
-The advance-risk estimator is a deliberately shallow scikit-learn histogram
-gradient booster with median imputation (seven leaves, 200 iterations). Its
-features are limited to:
+The currently pinned advance-risk estimator is a deliberately shallow
+scikit-learn histogram gradient booster with median imputation (seven leaves,
+200 iterations). Its features are limited to:
 
 - seasonal and issue-time sine/cosine encodings;
 - recent PiouPiou wind speed, gust, direction, trend, and freshness summaries;
@@ -68,16 +68,18 @@ exists in the upstream archive.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **Grand Port, Aix-les-Bains** (`2176`)<br>[OpenWindMap](https://www.openwindmap.org/) PiouPiou/Windbird | Minimum, average, maximum/gust (`km/h`); direction (`°`); morning mean, trend, westerly component, and freshness | — | — | — | — | — | — |
 | **CHAMBERY-AIX airport** (`73329001`)<br>Météo-France · [public station view](https://www.meteociel.fr/temps-reel/obs_villes.php?code2=73329001) | 10 m speed (`m/s`); direction (`°`); latest, morning mean/change, and mean westerly component | Air temperature and dew point (`°C`): latest, morning mean/change; dew-point depression | Relative humidity (`%`): latest and morning mean/change | Mean-sea-level and surface pressure (`hPa`): latest and morning mean/change | Hourly precipitation accumulated since 06:00 (`mm`) | Visibility (`m`): latest and morning mean/change; mean cloud cover (`oktas`) and sky-obscured fraction | Sunshine duration (`min`); global, direct, and diffuse radiation totals (`J/cm²`) and means (`W/m²`) |
-| **BELLEY** (`01034004`)<br>Météo-France | — | Air temperature (`°C`): latest, morning mean, and morning change | — | — | — | — | — |
-| **NOVALAISE** (`73191001`)<br>Météo-France | — | Air temperature (`°C`): latest, morning mean, and morning change | — | — | — | — | — |
-| **MONT DU CHAT** (`73051001`, ridge)<br>Météo-France | — | Air temperature (`°C`): latest, morning mean, and morning change | — | — | — | — | — |
+| **BELLEY** (`01034004`)<br>Météo-France | 10 m speed and direction summaries | Air temperature and dew point summaries; dew-point depression | Relative-humidity summaries | — | Morning accumulation | — | — |
+| **NOVALAISE** (`73191001`)<br>Météo-France | — | Air-temperature summaries | — | — | Intermittent morning accumulation | — | — |
+| **MONT DU CHAT** (`73051001`, ridge)<br>Météo-France | 10 m speed and direction summaries | Air temperature and dew point summaries; dew-point depression | Relative-humidity summaries | — | Morning accumulation | — | — |
 
-The three auxiliary stations are deliberately temperature-only. Their readings
-form Belley-minus-airport, Novalaise-minus-airport, and
-Belley-minus-Mont-du-Chat contrasts, representing the lowland, lake-side, and
-ridge temperature structure west of the lake. CHAMBERY-AIX is therefore the
-same airport station often identified by the WMO code `07491`; it is not an
-additional sixth source.
+The three auxiliary stations retain every quantity present in their archives.
+Their temperature readings form Belley-minus-airport, Novalaise-minus-airport,
+and Belley-minus-Mont-du-Chat contrasts, representing the lowland, lake-side,
+and ridge temperature structure west of the lake. Secondary feed freshness
+remains temperature-based because NOVALAISE does not publish the full
+humidity/wind bundle, so optional fields do not change row membership.
+CHAMBERY-AIX is therefore the same airport station often identified by the WMO
+code `07491`; it is not an additional sixth source.
 
 For retrospective builds, the repository keeps monthly OpenWindMap CSVs and
 downloads the required Météo-France hourly open-data archives by
@@ -226,6 +228,28 @@ warning time, and the share of events whose onset evidence rises over the final
 six hours. Rule matches are candidates, not independently confirmed Traverse
 observations. Dashboard data is built from
 the local archives on first load and then cached in memory.
+
+## All-variable auxiliary-station experiment
+
+The data pipeline now retains every weather field supplied by each auxiliary
+station rather than discarding everything except temperature. This expands a
+freshly trained model from 94 to 123 non-empty features without changing any
+rows or dates. The additional fields are wind, moisture, and rain from BELLEY
+and MONT DU CHAT plus intermittent rain from NOVALAISE; the archives do not
+provide pressure at those three sites.
+
+The change is not an established accuracy improvement. On rolling 2020–2025
+predictions, adding every available auxiliary field reduced three-hour
+event-day AP from `0.2331` to `0.2184` (paired day-bootstrap difference
+`-0.0147`, 95% interval `[-0.0406, +0.0132]`). On partial 2026 it increased AP
+from `0.1747` to `0.2497` (`+0.0751`, interval `[+0.0044, +0.2057]`), but that
+slice contains only 11 events and false-alert days rose from `20.2%` to `29.2%`.
+
+Auxiliary wind alone is the promising narrower hypothesis: rolling AP was
+effectively tied at `0.2370`, while partial-2026 AP was `0.2630`. Moisture and
+rain reduced AP on both slices. The pinned live 94-feature bundle is therefore
+unchanged; see the
+[full ablation record](experiments/20260902-all-station-weather-ablation/plan.md).
 
 ## Publish the live GitHub Pages prediction
 

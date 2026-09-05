@@ -175,22 +175,12 @@ def station_weather_features(
         maximum_age_minutes=config.maximum_weather_feature_age_minutes,
         prefix=prefix,
         freshness_fields=(
-            ("T",)
-            if station != PRIMARY_WEATHER_STATION
-            else ("T", "U", "FF", "DD")
+            ("T", "U", "FF", "DD")
+            if station == PRIMARY_WEATHER_STATION
+            else ("T",)
         ),
     )
-    if station == PRIMARY_WEATHER_STATION:
-        return features
-    keep = {
-        f"{prefix}_observation_count_morning",
-        f"{prefix}_core_observation_count_morning",
-        f"{prefix}_last_age_minutes",
-        f"{prefix}_temperature_c_latest",
-        f"{prefix}_temperature_c_mean",
-        f"{prefix}_temperature_c_delta_morning",
-    }
-    return {name: value for name, value in features.items() if name in keep}
+    return features
 
 
 def temperature_contrast_features(features: Mapping[str, float]) -> dict[str, float]:
