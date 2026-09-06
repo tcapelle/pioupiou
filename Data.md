@@ -9,7 +9,8 @@ The most important distinction is that a file existing for a year does not make
 that year complete. A row reaches the model dataset only after location,
 coverage, season, freshness, and cross-station join checks. The current local
 dataset has **37,138 rows across 1,432 dates**, from 2016-08-09 through
-2026-08-30. It has 110 columns, of which the model consumes 94 features.
+2026-08-30. After retaining every weather quantity available at every station,
+it has 206 columns, of which the model can consume 123 non-empty features.
 
 ## Where the data comes from
 
@@ -34,7 +35,7 @@ flowchart LR
 | Data | Upstream | Local copy | What the current pipeline uses | Local coverage |
 | --- | --- | --- | --- | --- |
 | Grand Port wind | [OpenWindMap](https://www.openwindmap.org/) / `https://api.pioupiou.fr/v1/archive/2176` | `pioudata/YYYY-MM.csv` | Minimum, average, and maximum wind speed plus heading. The same observations define the target. | Monthly filenames exist for 2014-2025 and May-August 2026, but lake-location-valid observations only run from 2016-08-08 through 2026-08-31. |
-| Hourly weather | [Meteo-France hourly open data](https://www.data.gouv.fr/datasets/donnees-climatologiques-de-base-horaires) via data.gouv dataset `6569b4473bedf2e7abad3b72` | `pioudata/.weather_cache/meteofrance_*.csv.gz` | CHAMBERY-AIX full weather block; BELLEY, NOVALAISE, and MONT DU CHAT temperature blocks; three temperature contrasts. | All four station caches span 2010-01-01 through early 2026-08-31. MONT DU CHAT is missing five observation days in 2017; other gaps can still occur at individual fields/checkpoints. |
+| Hourly weather | [Meteo-France hourly open data](https://www.data.gouv.fr/datasets/donnees-climatologiques-de-base-horaires) via data.gouv dataset `6569b4473bedf2e7abad3b72` | `pioudata/.weather_cache/meteofrance_*.csv.gz` | Every available quantity at all four stations plus three temperature contrasts. | All four station caches span 2010-01-01 through early 2026-08-31. MONT DU CHAT is missing five observation days in 2017; other gaps can still occur at individual fields/checkpoints. |
 | Daily weather | [Meteo-France daily open data](https://www.data.gouv.fr/datasets/donnees-climatologiques-de-base-quotidiennes) via data.gouv dataset `6569b51ae64326786e4e8e1a` | `pioudata/.weather_cache/meteofrance_daily_*.csv.gz` | **Not used by the current dataset builder or model.** These files are leftovers from the earlier daily-maximum-temperature target. | CHAMBERY-AIX cache spans 1973-07-01 through 2026-08-27. |
 | Calendar | Derived locally | In the final CSV | Day-of-year and issue-time sine/cosine features. | Wherever a model-ready row exists. |
 
@@ -43,9 +44,17 @@ The four weather stations are:
 | Station | ID | Department | Elevation | Retained features |
 | --- | --- | --- | ---: | --- |
 | CHAMBERY-AIX | `73329001` | 73 | 235 m | Temperature, dew point, humidity, pressure, rain, visibility, cloud, radiation, wind, and freshness/count summaries |
-| BELLEY | `01034004` | 01 | 330 m | Temperature and freshness/count summaries |
-| NOVALAISE | `73191001` | 73 | 460 m | Temperature and freshness/count summaries |
-| MONT DU CHAT | `73051001` | 73 | 1,496 m | Temperature and freshness/count summaries |
+| BELLEY | `01034004` | 01 | 330 m | Temperature, dew point, humidity, rain, wind, and freshness/count summaries |
+| NOVALAISE | `73191001` | 73 | 460 m | Temperature, intermittent rain, and freshness/count summaries |
+| MONT DU CHAT | `73051001` | 73 | 1,496 m | Temperature, dew point, humidity, rain, wind, and freshness/count summaries |
+
+The feature builder emits the same full schema for every weather station, but
+model training removes columns that are empty throughout the fit period. The
+archive contains pressure, visibility, cloud, and radiation only at
+CHAMBERY-AIX. BELLEY and MONT DU CHAT additionally provide moisture, rain, and
+wind; NOVALAISE adds only intermittent rain. Auxiliary feed freshness remains
+temperature-based so retaining optional fields does not change which rows enter
+the comparison.
 
 `pioudata/big.csv` and `pioudata/big-2024.csv` are legacy aggregate wind dumps.
 The current loader deliberately ignores them: it only accepts filenames matching

@@ -15,6 +15,7 @@ from realtime_inference import (
     meteofrance_observations,
 )
 from pioupiou.data.daily import (
+    BELLEY_WEATHER_STATION,
     LabelConfig,
     PiouObservation,
     deduplicate_piou_observations,
@@ -28,6 +29,7 @@ from pioupiou.data.daily import (
     weather_features,
     weather_value,
 )
+from pioupiou.data.timestep import station_weather_features
 
 
 LOCAL = ZoneInfo("Europe/Paris")
@@ -184,6 +186,35 @@ class ObservationFeatureTests(unittest.TestCase):
             prefix="mf_belley",
         )
         self.assertEqual(belley["mf_belley_temperature_c_latest"], 10.0)
+
+    def test_auxiliary_station_keeps_all_weather_features(self):
+        observation = {
+            "timestamp_local": datetime(2024, 7, 1, 11, 0, tzinfo=LOCAL),
+            "T": 10.0,
+            "TD": 4.0,
+            "U": 60.0,
+            "RR1": 1.0,
+            "PMER": float("nan"),
+            "PSTAT": float("nan"),
+            "N": float("nan"),
+            "VV": float("nan"),
+            "GLO": float("nan"),
+            "DIR": float("nan"),
+            "DIF": float("nan"),
+            "INS": float("nan"),
+            "FF": 3.0,
+            "DD": 270.0,
+        }
+        features = station_weather_features(
+            BELLEY_WEATHER_STATION,
+            [observation],
+            datetime(2024, 7, 1, 12, 0, tzinfo=LOCAL),
+            LabelConfig(),
+        )
+        self.assertEqual(features["mf_belley_last_age_minutes"], 60.0)
+        self.assertEqual(features["mf_belley_relative_humidity_pct_latest"], 60.0)
+        self.assertEqual(features["mf_belley_wind_speed_10m_ms_latest"], 3.0)
+        self.assertAlmostEqual(features["mf_belley_west_component_mean_ms"], 3.0)
 
     def test_realtime_weather_mapping_preserves_units_and_cutoff(self):
         row = {
