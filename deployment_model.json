@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "release": "model-2026-08-31-train-through-2025",
-  "url": "https://github.com/tcapelle/pioupiou/releases/download/model-2026-08-31-train-through-2025/traverse_model.joblib",
-  "sha256": "df2a0f05687e4df5f5e8797cd5e61c1d8c079659028c78097575a58ab5a3ba97"
+  "release": "model-2026-09-06-remaining-wind",
+  "url": "https://github.com/tcapelle/pioupiou/releases/download/model-2026-09-06-remaining-wind/traverse_model.joblib",
+  "sha256": "8badd03cc4664048b0838acc0a3d21c13cea8ac062fef0d49324675954122d19"
 }

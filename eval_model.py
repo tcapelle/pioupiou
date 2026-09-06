@@ -98,6 +98,8 @@ def event_day_confusion(
 def evaluate_2026(bundle: dict[str, Any], frame: pd.DataFrame) -> dict[str, Any]:
     """Score 2026 without fitting or selecting any model parameter."""
     metadata = bundle["metadata"]
+    if metadata.get("model_kind") == "remaining_wind":
+        raise ValueError("This evaluator requires the legacy onset model and labels. Use scripts.remaining_wind for remaining-window evaluation.")
     fitted_years = {int(year) for year in metadata["split"]["train_years"]}
     if EVALUATION_YEAR in fitted_years:
         raise ValueError(f"Refusing to evaluate fitted training year {EVALUATION_YEAR}")

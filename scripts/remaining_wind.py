@@ -266,9 +266,37 @@ def train(args) -> None:
     print(json.dumps({"selected": selected, "mean_ap": {name: metrics[name]["mean_checkpoint_ap"] for name in names}, "intervals_vs_legacy": intervals}, indent=2), flush=True)
 
 
+def export_deployment(source: Path, output: Path) -> None:
+    """Package the selected fitted control for live inference without refitting."""
+    bundle = joblib.load(source)
+    research = bundle["metadata"]
+    config = research["target_config"]
+    if (research["model_kind"] != "remaining_wind_research"
+            or research["selected_variant"] != "remaining_wind"
+            or config["target_end_hour"] != 20
+            or config["minimum_sustained_minutes"] != 30
+            or config["speed_threshold_kmh"] != 18.52
+            or (config["heading_min_degrees"], config["heading_max_degrees"]) != (225, 315)):
+        raise ValueError("Live export requires the evaluated 94-feature westerly control")
+    bundle["metadata"] = {
+        "schema_version": 2,
+        "artifact_format": "joblib",
+        "model_kind": "remaining_wind",
+        "feature_names": research["feature_names"],
+        "estimator": {"library": "scikit-learn", "library_version": research["sklearn_version"]},
+        "model": {"threshold": None, "l2": research["l2"], "fit_weighting": research["fit_weighting"]},
+        "label": config,
+        "split": {"train_years": research["fit_years"]},
+        "provenance": {"research_bundle_sha256": sha256_file(source), "dataset_sha256": research["dataset_sha256"]},
+        "research": research,
+    }
+    save_model_bundle(bundle, output)
+    print(json.dumps({"output": str(output), "sha256": sha256_file(output)}, indent=2))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("features", "train", "predict"))
+    parser.add_argument("command", choices=("features", "train", "predict", "export"))
     parser.add_argument("--reference", type=Path, default=Path("artifacts/traverse_timestep.csv"))
     parser.add_argument("--input-dir", type=Path, default=Path("pioudata"))
     parser.add_argument("--cache-dir", type=Path, default=Path("pioudata/.weather_cache"))
@@ -279,6 +307,7 @@ def main() -> int:
     parser.add_argument("--end-hour", type=int, choices=(20, 21, 22))
     parser.add_argument("--date")
     parser.add_argument("--time")
+    parser.add_argument("--deployment-output", type=Path, default=Path("artifacts/remaining_wind_deployment/traverse_model.joblib"))
     args = parser.parse_args()
     if args.command == "features":
         build_features(args)
@@ -286,6 +315,8 @@ def main() -> int:
         if args.knots is None or args.direction is None or args.end_hour is None:
             parser.error("train requires --knots, --direction and --end-hour")
         train(args)
+    elif args.command == "export":
+        export_deployment(args.output_dir / "model.joblib", args.deployment_output)
     else:
         if args.date is None or args.time is None:
             parser.error("predict requires --date and --time")

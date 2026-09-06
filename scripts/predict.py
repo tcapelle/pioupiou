@@ -103,7 +103,8 @@ def main() -> int:
                 ),
                 "status": "ok",
                 "traverse_probability": float(probability[0]),
-                "predict_traverse": bool(predicted[0]),
+                "model_kind": loaded_artifact[0].get("model_kind", "advance_onset"),
+                "predict_traverse": None if predicted[0] is None else bool(predicted[0]),
                 "onset_evidence": float(
                     onset_evidence(
                         row,

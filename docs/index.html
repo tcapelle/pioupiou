@@ -165,10 +165,10 @@
           </div>
           <div id="result" hidden>
             <div id="probability" class="probability">–</div>
-            <div class="probability-label">chance of a qualifying Traverse later today</div>
+            <div class="probability-label">chance of 30 minutes of westerly wind at 10+ knots still ahead before 20:00</div>
             <div class="meter"><span id="meter"></span></div>
             <div class="metrics">
-              <span><b id="onset">–</b>onset within 3 hours</span>
+              <span id="onset-metric" hidden><b id="onset">–</b>onset within 3 hours</span>
               <span><b id="evidence">–</b>physical onset evidence</span>
               <span><b id="freshness">–</b>latest wind observation</span>
             </div>
@@ -192,9 +192,20 @@
       </div>
     </section>
     <section id="panel-results" class="tab-panel" role="tabpanel" aria-labelledby="tab-results" hidden>
+      <section class="card results">
+        <div class="eyebrow">Current model · remaining afternoon wind</div>
+        <h2>Useful wind still ahead</h2>
+        <p>At each update, predict at least 30 minutes of westerly wind at 10+ knots between noon (or now, if later) and 20:00. Continuing wind and later spells both count.</p>
+        <div class="result-metrics">
+          <span><b>0.256</b>mean checkpoint average precision</span>
+          <span><b>0.205</b>previous model on the same target</span>
+          <span><b>+0.030 to +0.073</b>95% interval for the gain</span>
+        </div>
+        <p class="results-note">Historical 2020–2025 development folds, at 08:00, 10:00, 12:00, 14:00, 16:00 and 18:00. Gains are strongest late in the afternoon; 08:00 ranking is slightly worse. No new 2026 evaluation, alert threshold or onset-time forecast. <a href="https://github.com/tcapelle/pioupiou/blob/main/experiments/20260905-remaining-wind-model/plan.md">Experiment details ↗</a></p>
+      </section>
       <section id="model-results" class="card results" hidden>
         <div class="results-head">
-          <div><div class="eyebrow">2026 retrospective audit</div><h2>Current model results</h2></div>
+          <div><div class="eyebrow">Previous onset model · 2026 retrospective audit</div><h2>Previous model results</h2></div>
           <p id="results-through"></p>
         </div>
         <div class="outcome-grid">
@@ -316,10 +327,12 @@
     const minutesOfDay = value => Number(String(value).slice(11,13)) * 60 + Number(String(value).slice(14,16));
     const renderArchiveDay = day => {
       const points = day.points.filter(point => point.current_wind);
-      const probabilityPoints = points.filter(point => Number.isFinite(Number(point.traverse_probability)));
+      const probabilityPoints = points.filter(point => point.traverse_probability != null && Number.isFinite(Number(point.traverse_probability)));
       byId("archive-event").textContent = day.label ? "Traverse candidate" : "No rule match";
       byId("archive-event").className = `archive-badge${day.label ? " event" : ""}`;
       byId("archive-source").textContent = day.source === "retrospective_reconstruction" ? "Retrospective reconstruction · not published live on this date" : "Contemporaneously published live";
+      const remainingPoints = probabilityPoints.filter(point => point.model_kind === "remaining_wind");
+      byId("archive-source").textContent += remainingPoints.length === 0 ? " · previous onset model" : remainingPoints.length === probabilityPoints.length ? " · remaining-wind model" : " · model changed during this day";
       byId("archive-max-probability").textContent = probabilityPoints.length ? percent(Math.max(...probabilityPoints.map(point => Number(point.traverse_probability)))) : "–";
       byId("archive-peak-gust").textContent = `${Math.max(...points.map(point => knots(point.current_wind.gust_kmh))).toFixed(1)} kn`;
       byId("archive-points").textContent = String(points.length);
@@ -341,7 +354,7 @@
         svg.append(svgNode("text", { x:left - 8, y:yWind(value) + 4, "text-anchor":"end", class:"chart-label" }, value));
       }
       [0,.25,.5,.75,1].forEach(value => svg.append(svgNode("text", { x:width - right + 8, y:yProbability(value) + 4, class:"chart-label" }, `${Math.round(value * 100)}%`)));
-      if (Number.isFinite(Number(day.threshold))) svg.append(svgNode("line", { x1:left, x2:width - right, y1:yProbability(day.threshold), y2:yProbability(day.threshold), class:"chart-threshold" }));
+      if (day.threshold != null && Number.isFinite(Number(day.threshold))) svg.append(svgNode("line", { x1:left, x2:width - right, y1:yProbability(day.threshold), y2:yProbability(day.threshold), class:"chart-threshold" }));
       const line = (value, y) => points.map(point => `${x(minutesOfDay(point.prediction_time))},${y(value(point))}`).join(" ");
       svg.append(svgNode("polyline", { points:line(point => knots(point.current_wind.gust_kmh), yWind), class:"chart-gust" }));
       svg.append(svgNode("polyline", { points:line(point => knots(point.current_wind.average_kmh), yWind), class:"chart-wind" }));
@@ -398,17 +411,18 @@
         }
         if (data.status === "outside_prediction_window") {
           byId("status").textContent = stale ? "Stale" : "Day complete";
-          byId("message").textContent = "Predictions run from 06:30 through 19:59 local time.";
+          byId("message").textContent = "Predictions run from 06:30 through 19:30 local time, leaving at least 30 minutes before 20:00.";
           return;
         }
         const probability = Number(data.traverse_probability);
         byId("result").hidden = false;
         byId("probability").textContent = percent(probability);
         byId("meter").style.width = percent(probability);
-        byId("onset").textContent = percent(data.onset_within_probabilities?.["180m"] ?? 0);
+        byId("onset-metric").hidden = data.onset_within_probabilities?.["180m"] == null;
+        byId("onset").textContent = data.onset_within_probabilities?.["180m"] == null ? "–" : percent(data.onset_within_probabilities["180m"]);
         byId("evidence").textContent = percent(data.onset_evidence ?? 0);
         byId("freshness").textContent = data.piou_observation_time ? displayTime(data.piou_observation_time) : "–";
-        byId("status").textContent = stale ? "Stale" : data.status === "onset_observed" ? "Onset observed" : data.predict_traverse ? "Traverse signal" : "No signal";
+        byId("status").textContent = stale ? "Stale" : data.status === "remaining_wind" ? "Updated" : data.status === "onset_observed" ? "Onset observed" : data.predict_traverse ? "Traverse signal" : "No signal";
         byId("status").className = `status ${stale ? "offline" : data.predict_traverse ? "alert" : ""}`;
         if (stale) byId("message").textContent = "The publishing computer has not updated this result recently.";
       })
