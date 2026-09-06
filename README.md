@@ -251,6 +251,16 @@ rain reduced AP on both slices. The pinned live 94-feature bundle is therefore
 unchanged; see the
 [full ablation record](experiments/20260902-all-station-weather-ablation/plan.md).
 
+A subsequent fixed-model experiment tested one- and three-hour temperature,
+radiation and wind changes from the existing caches. Thermal changes raised
+historical three-hour AP from `0.2331` to `0.2403`, with paired 95% difference
+interval `[-0.0052, +0.0198]`; wind changes and the combined block scored lower.
+No variant increased event coverage at a common 20% false-alert-day ceiling.
+This is not an established improvement. The
+[weather-dynamics experiment](experiments/20260905-weather-dynamics/plan.md)
+records the protocol and results; it does not reevaluate 2026 or fit a new
+deployment bundle.
+
 ## Publish the live GitHub Pages prediction
 
 The public page at <https://tcapelle.github.io/pioupiou/> reads the latest result
@@ -376,6 +386,24 @@ observations in `[12:00, 20:00)` show wind of at least 18.52 km/h from
 gaps no larger than 10 minutes. Temperature remains a predictor but is not part
 of the target. Dates outside the season and days below 75% target-window
 coverage have an unknown label and are excluded from training.
+
+The [afternoon-label audit](experiments/20260905-afternoon-label-audit/plan.md)
+checks this definition against the practical objective of knowing early
+whether the afternoon will be windy. On the same 1,279 historical dates,
+counting all directions at 10 knots for 30 minutes would increase positive
+days from 191 to 350. The audit also documents how strict run continuity and
+the three-hour warning metric differ from a planning decision updated through
+the afternoon. Of current events, 64% start at or after 16:00; extending the
+existing westerly target window to 21:00 adds 50 qualifying historical dates.
+
+The [remaining-wind research model](experiments/20260905-remaining-wind-model/plan.md)
+rebuilds labels at every checkpoint, retains post-onset examples, and removes
+the short-lead training penalty. A control using the existing 10-knot westerly
+rule and 20:00 cutoff improves mean checkpoint AP from `0.2047` to `0.2564`
+on historical 2020–2025 predictions scored against the same remaining-window
+labels. Gains are strongest at 16:00 and 18:00; 08:00 ranking is slightly worse.
+These are development results for a separate research bundle, not the pinned
+live model or a new independent test.
 
 This is a leakage-free retrospective prototype, not a production warning
 service. Do not tune feature choices or thresholds on the held-out years.
