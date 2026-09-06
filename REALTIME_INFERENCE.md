@@ -31,17 +31,15 @@ TRAVERSE_MODEL=artifacts/traverse_model.joblib \
 `scripts.prepare_timestep` remains the retrospective path backed by monthly
 PiouPiou CSV files and the historical Météo-France cache.
 
-The response separates the boosted model's advance probability from
-`onset_evidence`, the observed westerly wind component normalized by the target
-speed. The latter is an interpretable event-monitoring index, not a forecast
-probability. The same 94 features feed an ordered four-interval companion whose
-cumulative estimates are returned under `onset_within_probabilities` for 60,
-120, and 180 minutes. By construction, the shorter-horizon estimate cannot
-exceed a longer-horizon estimate.
+The response reports the probability of at least 30 minutes of qualifying
+westerly wind still ahead before 20:00, with `model_kind: remaining_wind` and
+an explicit `target_window`. `onset_evidence` is observed wind evidence, not a
+probability. There is no selected alert threshold (`predict_traverse: null`) or
+onset-time companion (`onset_within_probabilities: {}`).
 
 ## Time and leakage contract
 
-- The model scores any local minute from `06:30` through `19:59` in
+- The model scores any local minute from `06:30` through `19:30` in
   `Europe/Paris`, from May 1 through September 30. Outside that season the API
   returns probability zero without scoring the model.
 - Only observations strictly before the requested issue time may enter a
@@ -54,14 +52,11 @@ exceed a longer-horizon estimate.
 - CHAMBERY-AIX requires a newest observation with finite temperature, humidity,
   wind speed, and wind direction no more than 90 minutes old. The three
   secondary stations require finite temperature with the same age limit.
-- The prediction window remains `[12:00, 20:00)` local time. The model was
-  trained only on positive rows before the onset of the first sustained
-  30-minute qualifying run. Once that sustained run becomes observable, the
-  API returns `status: onset_observed` and zero future-onset probabilities; live
-  observations are then event monitoring. Because the run requires 30 minutes
-  to confirm, its recorded start necessarily precedes the status change. The
-  target has no retrospective temperature gate; temperature is an
-  inference-time predictor only.
+- The prediction window is `[max(12:00, issue time), 20:00)` local time.
+  At least 30 minutes must remain, so 19:30 is the final scoring minute.
+  Training retains post-onset rows. An observed onset is returned as monitoring
+  information; it never suppresses the remaining-wind probability or changes
+  `status: remaining_wind`. Temperature is a predictor, not a target gate.
 
 These boundaries are part of the trained model contract. A live implementation
 must not substitute receipt time for observation time or include observations
@@ -271,7 +266,7 @@ They are calculated from the requested date and minute in `Europe/Paris`.
 ## Inference sequence
 
 1. Freeze an issue timestamp in `Europe/Paris` and reject times outside the
-   model's `06:30`–`19:59` scoring interval.
+   model's `06:30`–`19:30` scoring interval.
 2. Download Windbird 2176's recent archive and the Météo-France 24-hour hourly
    package for department 73.
 3. Select the configured station/location, normalize units, deduplicate by
@@ -282,7 +277,7 @@ They are calculated from the requested date and minute in `Europe/Paris`.
 6. Bind the row to the feature names stored in the model artifact and score it
    with the existing prediction pipeline.
 7. Print the prediction time, latest timestamp and age of each source, model
-   checksum, probability, and thresholded result.
+   checksum, remaining-wind probability, and target window.
 
 No observations need to be persisted to make one prediction, but retaining the
 raw responses and produced feature rows is valuable for reproducibility and

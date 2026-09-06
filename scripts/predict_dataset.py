@@ -40,6 +40,8 @@ def main() -> int:
 
     bundle, model_sha256 = load_bundle(args.model)
     payload = bundle["metadata"]
+    if payload.get("model_kind") == "remaining_wind":
+        raise SystemExit("This evaluator requires the legacy onset model and labels. Use scripts.remaining_wind for remaining-window evaluation.")
     pipeline = bundle["pipeline"]
     frame = load_dataset(args.dataset)
     held_out = frame[frame["year"] == args.year].copy()

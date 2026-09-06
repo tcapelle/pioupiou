@@ -1025,9 +1025,19 @@ def predict_loaded(
                 f"{np.flatnonzero(stale).tolist()}"
             )
     numeric = numeric_feature_frame(frame, feature_names)
+    if payload.get("model_kind") == "remaining_wind":
+        label = payload["label"]
+        latest_issue = label["target_end_hour"] * 60 - label["minimum_sustained_minutes"]
+        if "issue_minutes" not in frame or not pd.to_numeric(
+            frame["issue_minutes"], errors="coerce"
+        ).between(390, latest_issue).all():
+            raise ValueError("outside_prediction_window: remaining wind requires at least 30 minutes before 20:00")
     probability = predict_probabilities(pipeline, numeric, feature_names)
-    threshold = float(payload["model"]["threshold"])
-    predicted = probability >= threshold
+    threshold = payload["model"]["threshold"]
+    predicted = (
+        np.full(len(frame), None, dtype=object)
+        if threshold is None else probability >= float(threshold)
+    )
     # Exact signed logit contributions are a property of the previous linear model.
     # Keep the response shape stable while avoiding misleading tree attributions.
     contribution_rows: list[list[tuple[str, float]]] = [[] for _ in range(len(frame))]

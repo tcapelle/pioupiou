@@ -187,6 +187,7 @@ def predict_now(
     bundle, model_sha256 = load_bundle(model)
     payload = bundle["metadata"]
     pipeline = bundle["pipeline"]
+    remaining_wind = payload.get("model_kind") == "remaining_wind"
     config = label_config_from_payload(payload["label"])
     local_timezone = ZoneInfo(config.timezone_name)
     cutoff = datetime.now(local_timezone).replace(second=0, microsecond=0)
@@ -196,10 +197,12 @@ def predict_now(
     )
     latest_wind = current_wind(piou_observations, cutoff)
     issue_minutes = cutoff.hour * 60 + cutoff.minute
-    if not 6 * 60 + 30 <= issue_minutes < 20 * 60:
+    last_issue = config.target_end_hour * 60 - config.minimum_sustained_minutes
+    if not 6 * 60 + 30 <= issue_minutes < 20 * 60 or (remaining_wind and issue_minutes > last_issue):
         return {
             "prediction_time": cutoff.isoformat(),
             "model_sha256": model_sha256,
+            "model_kind": payload.get("model_kind", "advance_onset"),
             "status": "outside_prediction_window",
             "current_wind": latest_wind,
         }
@@ -241,6 +244,7 @@ def predict_now(
     )
 
     prepared = {
+        "issue_minutes": issue_minutes,
         **calendar_features(cutoff.date()),
         **issue_time_features(issue_minutes),
         **piou,
@@ -250,7 +254,7 @@ def predict_now(
     missing = sorted(set(feature_names).difference(prepared))
     if missing:
         raise ValueError(f"Cannot construct model features: {missing}")
-    frame = pd.DataFrame([{name: prepared[name] for name in feature_names}])
+    frame = pd.DataFrame([prepared])
     probability, predicted, _ = predict_loaded(payload, pipeline, frame)
     onset_probabilities = predict_bundle_onset_probabilities(bundle, frame)
     if observed_onset is not None:
@@ -262,7 +266,12 @@ def predict_now(
     return {
         "prediction_time": cutoff.isoformat(),
         "model_sha256": model_sha256,
-        "status": "onset_observed" if observed_onset is not None else "pre_onset",
+        "model_kind": payload.get("model_kind", "advance_onset"),
+        "status": "remaining_wind" if remaining_wind else ("onset_observed" if observed_onset is not None else "pre_onset"),
+        "target_window": {
+            "start": max(cutoff, local_boundary(cutoff.date(), config.cutoff_hour, local_timezone)).isoformat(),
+            "end": local_boundary(cutoff.date(), config.target_end_hour, local_timezone).isoformat(),
+        } if remaining_wind else None,
         "observed_wind_onset": (
             observed_onset.isoformat() if observed_onset is not None else None
         ),
@@ -278,7 +287,7 @@ def predict_now(
             for slug, values in meteo_observations.items()
         },
         "traverse_probability": float(probability[0]),
-        "predict_traverse": bool(predicted[0]),
+        "predict_traverse": None if predicted[0] is None else bool(predicted[0]),
         "onset_evidence": float(
             onset_evidence(frame, config.speed_threshold_kmh)[0]
         ),
